@@ -1,0 +1,41 @@
+# Environnements virtuels
+venv/
+.env/
+.venv/
+
+# Fichiers Python compilés
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs et fichiers temporaires
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+
+# Configurations locales
+*.env
+*.local
+.DS_Store
+Thumbs.db
+
+# Caches
+.cache/
+.mypy_cache/
+.pytest_cache/
+coverage/
+htmlcov/
+
+# IDE (VS Code, PyCharm, etc.)
+.vscode/
+.idea/
+*.iml
+
+# Distribution / Build
+build/
+dist/
+*.egg-info/
+.eggs/
