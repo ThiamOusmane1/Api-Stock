@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { fetchArticles, createOrUpdateArticle } from "../api";
+import { fetchArticles, createArticle } from "../api";
 import Message from "./Message";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -109,7 +109,7 @@ const ArticleList = ({ refresh }) => {
     if (!window.confirm(`Confirmer l'ajout de ${nom} (${quantite}) ?`)) return;
 
     try {
-      const newArticle = await createOrUpdateArticle({
+      const newArticle = await createArticle({
         nom,
         description,
         longueur,

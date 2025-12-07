@@ -1,0 +1,35 @@
+{
+  "info": {
+    "name": "Stock-Echafaudages API",
+    "_postman_id": "stock-api-collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Login",
+      "request": {
+        "method": "POST",
+        "header": [{"key":"Content-Type","value":"application/json"}],
+        "body": {"mode":"raw","raw":"{\"username\":\"admin\",\"password\":\"adminpass\"}"},
+        "url": {"raw":"http://localhost:8000/auth/login","protocol":"http","host":["localhost"],"port":"8000","path":["auth","login"]}
+      }
+    },
+    {
+      "name": "Get articles",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {"raw":"http://localhost:8000/articles/","protocol":"http","host":["localhost"],"port":"8000","path":["articles",""]}
+      }
+    },
+    {
+      "name": "Calculate echafaudage",
+      "request": {
+        "method":"POST",
+        "header":[{"key":"Content-Type","value":"application/json"}],
+        "body":{"mode":"raw","raw":"{\"hauteur\":4, \"longueur\":6, \"largeur\":1, \"apply_to_stock\": false}"},
+        "url":{"raw":"http://localhost:8000/calcul/","protocol":"http","host":["localhost"],"port":"8000","path":["calcul",""]}
+      }
+    }
+  ]
+}

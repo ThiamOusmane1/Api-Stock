@@ -1,18 +1,12 @@
-# 🚀 API Stock Échafaudages (FastAPI)
+# API Stock Échafaudages (FastAPI) - PostgreSQL ready
 
-## 📌 Description
-API de gestion de stock d’échafaudages multidirectionnels avec :
-- Authentification **JWT**
-- Multi-entreprises (Superadmin / Admin / User)
-- Gestion **articles / retraits / calcul échafaudage**
-- Allocation optimisée (**Knapsack / DP**)
+## Pré-requis
+- Python 3.10+ (recommandé 3.11)
+- PostgreSQL (ou utilise SQLite en local)
+- Git, pip
 
----
-
-## ⚙️ Installation
+## Installation
+1. Clone le repo:
 ```bash
-git clone <repo>
+git clone <ton-repo>
 cd app-stock-api
-python -m venv venv
-source venv/bin/activate   # ou venv\Scripts\activate sous Windows
-pip install -r requirements.txt

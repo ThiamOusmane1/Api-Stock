@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { createOrUpdateArticle } from "../api";
+import { createArticle } from "../api"; 
 import Message from "./Message";
 
 const ArticleForm = ({ onSuccess }) => {

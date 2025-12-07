@@ -1,13 +1,26 @@
 # database.py
-from sqlalchemy import create_engine, MetaData
-from databases import Database
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+import os
+from dotenv import load_dotenv
+# Charger les variables d'environnement depuis .env
+load_dotenv()
 
-DATABASE_URL = "sqlite:///./stock.db"
+# Exemple pour PostgreSQL :
+# DATABASE_URL=postgresql+psycopg2://user:password@localhost:5432/stockdb
+# (Sinon, SQLite sera utilisé par défaut)
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
 
-# async DB
-database = Database(DATABASE_URL)
+# Création du moteur SQLAlchemy
+connect_args = {}
+if DATABASE_URL.startswith("sqlite"):
+    connect_args = {"check_same_thread": False}
 
-# SQLAlchemy engine + metadata
-# check_same_thread False for SQLite + SQLAlchemy in multi threads
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-metadata = MetaData()
+engine = create_engine(DATABASE_URL, connect_args=connect_args)
+
+# Fabrique de sessions
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Base commune pour tous les modèles ORM
+Base = declarative_base()

@@ -1,51 +1,150 @@
-const API_URL = "http://localhost:8000";
+import axios from "axios";
 
-// Gestion du token avec localStorage
-export const getToken = () => localStorage.getItem("token");
-export const setToken = (t) => localStorage.setItem("token", t);
-export const clearToken = () => localStorage.removeItem("token");
+const API_URL = "http://127.0.0.1:8000";
 
-// Helper fetch avec Auth
-const authFetch = async (url, options = {}) => {
-  const headers = { ...(options.headers || {}), "Content-Type": "application/json" };
-  const token = getToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(`${API_URL}${url}`, { ...options, headers });
-  if (!res.ok) {
-    const msg = await res.text().catch(() => res.statusText);
-    throw new Error(msg);
-  }
-  return await res.json();
-};
+const api = axios.create({
+  baseURL: API_URL,
+});
 
-/* ---------------- AUTH ---------------- */
+// Intercepteur pour ajouter le token JWT à chaque requête
+api.interceptors.request.use(
+  (config) => {
+    const userStr = localStorage.getItem("user");
+    if (userStr) {
+      try {
+        const user = JSON.parse(userStr);
+        if (user && user.access_token) {
+          config.headers.Authorization = `Bearer ${user.access_token}`;
+        }
+      } catch (e) {
+        console.error("Erreur parsing user:", e);
+      }
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// ======================= AUTHENTIFICATION =======================
 export const login = async (username, password) => {
-  const res = await fetch(`${API_URL}/auth/login`, {
-    method: "POST",
+  const formData = new URLSearchParams();
+  formData.append("username", username);
+  formData.append("password", password);
+  
+  const response = await api.post("/auth/login", formData, {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ username, password }),
   });
-  if (!res.ok) throw new Error("Identifiants invalides");
-  const data = await res.json();
-  setToken(data.access_token);
-  return data;
+  return response.data;
 };
 
-export const logout = () => {
-  clearToken();
+export const getCurrentUser = async () => {
+  const response = await api.get("/users/me");
+  return response.data;
 };
 
-/* ---------------- ARTICLES ---------------- */
-export const fetchArticles = () => authFetch("/articles/");
-export const createOrUpdateArticle = (article) =>
-  authFetch("/articles/", { method: "POST", body: JSON.stringify(article) });
-export const deleteArticle = (id) =>
-  authFetch(`/articles/${id}`, { method: "DELETE" });
+// ======================= ENTREPRISES =======================
+export const fetchCompanies = async () => {
+  const response = await api.get("/entreprises");
+  return response.data;
+};
 
-/* ---------------- RETRAITS ---------------- */
-export const fetchRetraits = () => authFetch("/retraits/");
-export const retirerArticle = (id, quantite) =>
-  authFetch(`/articles/${id}/retrait`, {
-    method: "POST",
-    body: JSON.stringify({ quantite }),
+export const createCompany = async (name) => {
+  const response = await api.post("/entreprises", { nom: name });
+  return response.data;
+};
+
+// ======================= ARTICLES =======================
+export const fetchArticles = async () => {
+  const response = await api.get("/articles");
+  return response.data;
+};
+
+export const createArticle = async (article) => {
+  const response = await api.post("/articles", article);
+  return response.data;
+};
+
+export const updateArticle = async (id, article) => {
+  const response = await api.put(`/articles/${id}`, article);
+  return response.data;
+};
+
+export const deleteArticle = async (id) => {
+  const response = await api.delete(`/articles/${id}`);
+  return response.data;
+};
+
+export const updateArticleQuantity = async (id, quantite) => {
+  const response = await api.put(`/articles/${id}`, { quantite });
+  return response.data;
+};
+
+// ======================= RETRAITS =======================
+export const retirerArticle = async (articleId, quantite) => {
+  const response = await api.post(`/retraits/${articleId}`, { quantite });
+  return response.data;
+};
+
+export const fetchRetraits = async () => {
+  const response = await api.get("/retraits");
+  return response.data;
+};
+
+// ======================= CALCULATEUR ÉCHAFAUDAGE =======================
+export const calculerEchafaudage = async (hauteur, longueur, largeur) => {
+  const response = await api.post("/calcul/", {
+    hauteur,
+    longueur,
+    largeur,
+    apply_to_stock: false
   });
+  return response.data;
+};
+
+export const appliquerAllocation = async (pieces) => {
+  const response = await api.post("/calcul/", { 
+    hauteur: 0,
+    longueur: 0, 
+    largeur: 0,
+    apply_to_stock: true,
+    pieces 
+  });
+  return response.data;
+};
+
+// ======================= UTILISATEURS (ADMIN) =======================
+export const fetchUsers = async () => {
+  const response = await api.get("/users");
+  return response.data;
+};
+
+export const createUser = async (userData) => {
+  const response = await api.post("/users", userData);
+  return response.data;
+};
+
+export const deleteUser = async (id) => {
+  const response = await api.delete(`/users/${id}`);
+  return response.data;
+};
+
+// ======================= GESTION ADMIN/USER (NOUVEAUX) =======================
+export const createAdmin = async (adminData) => {
+  const response = await api.post("/admin/create-admin", adminData);
+  return response.data;
+};
+
+export const createUserByAdmin = async (userData) => {
+  const response = await api.post("/admin/create-user", userData);
+  return response.data;
+};
+
+export const changePassword = async (oldPassword, newPassword) => {
+  const response = await api.post("/auth/change-password", {
+    old_password: oldPassword,
+    new_password: newPassword,
+  });
+  return response.data;
+};
+
+export default api;

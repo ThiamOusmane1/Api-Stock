@@ -1,52 +1,67 @@
-# models.py
-from sqlalchemy import Table, Column, Integer, String, Float, ForeignKey, DateTime
-from sqlalchemy import Boolean
-from database import metadata
+from sqlalchemy import Column, Integer, String, Float, Enum, ForeignKey, DateTime, Boolean
+from sqlalchemy.orm import relationship
+from database import Base
+import enum
 from datetime import datetime
 
-# Entreprises
-entreprises = Table(
-    "entreprises",
-    metadata,
-    Column("id", Integer, primary_key=True),
-    Column("nom", String, unique=True, nullable=False),
-)
+class RoleEnum(str, enum.Enum):
+    SUPERADMIN = "superadmin"
+    ADMIN = "admin"
+    USER = "user"
 
-# Utilisateurs (role: superadmin | admin | user)
-users = Table(
-    "users",
-    metadata,
-    Column("id", Integer, primary_key=True),
-    Column("username", String, unique=True, nullable=False),
-    Column("hashed_password", String, nullable=False),
-    Column("role", String, default="user", nullable=False),
-    Column("entreprise_id", Integer, ForeignKey("entreprises.id"), nullable=True),
-)
+class Company(Base):
+    __tablename__ = "companies"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, nullable=False, index=True)
+    users = relationship("User", back_populates="company")
+    articles = relationship("Article", back_populates="company")
+    retraits = relationship("Retrait", back_populates="company")
 
-# Articles (tenant aware)
-articles = Table(
-    "articles",
-    metadata,
-    Column("id", Integer, primary_key=True),
-    Column("entreprise_id", Integer, ForeignKey("entreprises.id")),
-    Column("nom", String, nullable=False),
-    Column("description", String, nullable=True),
-    Column("quantite", Integer, nullable=False, default=0),
-    Column("longueur", Float, nullable=True),
-    Column("largeur", Float, nullable=True),
-    Column("hauteur", Float, nullable=True),
-    Column("poids", Float, nullable=True),
-)
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, nullable=False, index=True)
+    password_hash = Column(String, nullable=False)
+    role = Column(Enum(RoleEnum), default=RoleEnum.USER)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    
+    # 🆕 NOUVEAUX CHAMPS pour gestion première connexion
+    first_login = Column(Boolean, default=True)  # True = doit changer son mot de passe
+    password_reset_required = Column(Boolean, default=False)  # Pour reset forcé
+    email = Column(String, nullable=True)  # Pour envoi mot de passe
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    company = relationship("Company", back_populates="users")
+    retraits = relationship("Retrait", back_populates="user")
 
-# Retraits (historique)
-retraits = Table(
-    "retraits",
-    metadata,
-    Column("id", Integer, primary_key=True),
-    Column("entreprise_id", Integer, ForeignKey("entreprises.id")),
-    Column("article_id", Integer, ForeignKey("articles.id")),
-    Column("quantite", Integer, nullable=False),
-    Column("poids_total", Float, nullable=False),
-    Column("date", DateTime, default=datetime.utcnow),
-    Column("user_id", Integer, ForeignKey("users.id"), nullable=True),
-)
+class Article(Base):
+    __tablename__ = "articles"
+    id = Column(Integer, primary_key=True, index=True)
+    nom = Column(String, nullable=False, index=True)
+    reference = Column(String, nullable=True, index=True)
+    description = Column(String, nullable=True)
+    category = Column(String, nullable=True, index=True)
+    quantite = Column(Integer, default=0)
+    prix_unitaire = Column(Float, default=0.0)
+    longueur = Column(Float, nullable=True)
+    largeur = Column(Float, nullable=True)
+    hauteur = Column(Float, nullable=True)
+    poids = Column(Float, nullable=True)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    company = relationship("Company", back_populates="articles")
+    retraits = relationship("Retrait", back_populates="article")
+
+class Retrait(Base):
+    __tablename__ = "retraits"
+    id = Column(Integer, primary_key=True, index=True)
+    article_id = Column(Integer, ForeignKey("articles.id"), nullable=False)
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    nom_utilisateur = Column(String, nullable=True)
+    quantite = Column(Integer, nullable=False)
+    poids_total = Column(Float, default=0.0)
+    date_retrait = Column(DateTime, default=datetime.utcnow)
+    
+    article = relationship("Article", back_populates="retraits")
+    company = relationship("Company", back_populates="retraits")
+    user = relationship("User", back_populates="retraits")
