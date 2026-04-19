@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from "react";
 import { AuthContext } from "../AuthContext";
-import { fetchCompanies, createCompany, createAdmin } from "../api";
+import { fetchCompanies, createCompany, createAdmin, companyAction } from "../api"; // ✅ companyAction importé
 import "../App.css";
 
 const SuperAdminDashboard = ({ user }) => {
@@ -79,7 +79,8 @@ const SuperAdminDashboard = ({ user }) => {
       
       setMessage({
         type: "success",
-        text: `Admin "${result.username}" créé ! Mot de passe temporaire : ${result.temp_password} (envoyé par email à ${result.email})`,
+        text: `Administrateur "${result.username}" créé avec succès.
+      Un email contenant les identifiants temporaires a été envoyé à ${result.email}.`,
       });
       
       setAdminUsername("");
@@ -89,6 +90,36 @@ const SuperAdminDashboard = ({ user }) => {
       loadAdmins();
     } catch (err) {
       setMessage({ type: "error", text: err.response?.data?.detail || "Erreur création admin" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ✅ CORRIGÉ : Utilise la fonction companyAction d'api.js
+  const handleCompanyAction = async (companyId, actionType) => {
+    setLoading(true);
+    try {
+      // ✅ On utilise la fonction centralisée
+      await companyAction(companyId, actionType);
+      
+      const actionLabels = {
+        suspend: "suspendue",
+        activate: "réactivée",
+        terminate: "résiliée"
+      };
+      
+      setMessage({ 
+        type: "success", 
+        text: `✅ Entreprise ${actionLabels[actionType]} avec succès` 
+      });
+      
+      loadCompanies();
+    } catch (err) {
+      console.error("Erreur action entreprise:", err);
+      setMessage({ 
+        type: "error", 
+        text: err.response?.data?.detail || "Erreur lors de l'action sur l'entreprise" 
+      });
     } finally {
       setLoading(false);
     }
@@ -196,15 +227,39 @@ const SuperAdminDashboard = ({ user }) => {
                           <td>{companyAdmins.length}</td>
                           <td>
                             <button
+                              onClick={() => handleCompanyAction(company.id, "suspend")}
+                              className="btn-action"
+                              style={{ fontSize: "12px", marginRight: "5px" }}
+                              disabled={loading}
+                            >
+                              ⏸️ Suspendre
+                            </button>
+                            <button
+                              onClick={() => handleCompanyAction(company.id, "activate")}
+                              className="btn-action"
+                              style={{ fontSize: "12px", marginRight: "5px" }}
+                              disabled={loading}
+                            >
+                              ▶️ Réactiver
+                            </button>
+                            <button
+                              onClick={() => handleCompanyAction(company.id, "terminate")}
+                              className="btn-action terminate"
+                              style={{ fontSize: "12px", backgroundColor: "#dc3545" }}
+                              disabled={loading}
+                            >
+                              🗑️ Résilier
+                            </button>
+                            <button
                               onClick={() => {
                                 setSelectedCompanyId(company.id);
                                 setShowCreateAdmin(true);
                                 setCurrentTab("admins");
                               }}
                               className="btn-add"
-                              style={{ fontSize: "12px", padding: "6px 12px" }}
+                              style={{ fontSize: "12px", padding: "6px 12px", marginLeft: "5px" }}
                             >
-                              Créer un admin
+                              ➕ Créer un admin
                             </button>
                           </td>
                         </tr>

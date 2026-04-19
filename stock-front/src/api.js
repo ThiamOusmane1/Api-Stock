@@ -25,6 +25,29 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+// 🚫 Intercepteur pour bloquer les entreprises suspendues / résiliées
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response?.status === 403 &&
+      error.response?.data?.detail?.includes("Entreprise suspendue")
+    ) {
+      alert("🚫 Votre entreprise est suspendue ou résiliée.\nVeuillez contacter l’administrateur.");
+
+      // Nettoyage session
+      localStorage.removeItem("user");
+      localStorage.removeItem("token");
+
+      // Redirection login
+      window.location.href = "/login";
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+
 // ======================= AUTHENTIFICATION =======================
 export const login = async (username, password) => {
   const formData = new URLSearchParams();
@@ -50,6 +73,26 @@ export const fetchCompanies = async () => {
 
 export const createCompany = async (name) => {
   const response = await api.post("/entreprises", { nom: name });
+  return response.data;
+};
+
+/**
+ * companyAction permet de suspendre, réactiver ou résilier une entreprise
+ * @param {number} companyId 
+ * @param {string} actionType - "suspend" | "activate" | "terminate"
+ */
+export const companyAction = async (companyId, actionType) => {
+  const endpointMap = {
+    suspend: `/admin/entreprises/${companyId}/suspend`,
+    activate: `/admin/entreprises/${companyId}/activate`,
+    terminate: `/admin/entreprises/${companyId}/terminate`,
+  };
+
+  if (!endpointMap[actionType]) {
+    throw new Error(`Action inconnue: ${actionType}`);
+  }
+
+  const response = await api.post(endpointMap[actionType]);
   return response.data;
 };
 

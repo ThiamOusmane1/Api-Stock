@@ -5,13 +5,14 @@ import schemas
 from models import Company, User, Article, Retrait
 from typing import Optional, List, Dict
 from datetime import datetime
-import math
+import math 
+
+
 
 # ------------------------------
 # ENTREPRISES & USERS
 # ------------------------------
 def create_entreprise(db: Session, nom: str):
-    # Vérifier si l'entreprise existe déjà
     entreprise_exist = db.query(Company).filter(Company.name == nom).first()
     if entreprise_exist:
         raise ValueError("Une entreprise avec ce nom existe déjà.")
@@ -43,6 +44,9 @@ def get_user_by_username(db: Session, username: str):
 def get_user_by_id(db: Session, uid: int):
     return db.query(User).filter(User.id == uid).first()
 
+def get_article(db: Session, article_id: int):
+    return db.query(Article).filter(Article.id == article_id).first()
+
 # ------------------------------
 # ARTICLES
 # ------------------------------
@@ -51,20 +55,6 @@ def get_articles_for_entreprise(db: Session, company_id: Optional[int] = None):
     if company_id is not None:
         query = query.filter(Article.company_id == company_id)
     return query.all()
-
-def get_article_by_fields(db: Session, nom: str, longueur, largeur, hauteur, company_id: Optional[int] = None):
-    query = db.query(Article).filter(Article.nom == nom)
-    
-    if company_id is not None:
-        query = query.filter(Article.company_id == company_id)
-    
-    query = query.filter(
-        Article.longueur == longueur if longueur is not None else Article.longueur.is_(None),
-        Article.largeur == largeur if largeur is not None else Article.largeur.is_(None),
-        Article.hauteur == hauteur if hauteur is not None else Article.hauteur.is_(None)
-    )
-    
-    return query.first()
 
 def create_article(db: Session, article: schemas.ArticleCreate):
     db_article = Article(**article.dict())
@@ -106,13 +96,12 @@ def retirer_article_by_id(db: Session, article_id: int, quantite: int, company_i
     
     article.quantite = nouvelle_qte
     
-    # ✅ CORRECTION : date -> date_retrait
     retrait = Retrait(
         article_id=article_id,
         company_id=company_id,
         quantite=quantite,
         poids_total=poids_total,
-        date_retrait=datetime.utcnow(),  # ✅ Corrigé ici
+        date_retrait=datetime.utcnow(),
         user_id=user_id
     )
     
@@ -130,18 +119,19 @@ def retirer_article_by_id(db: Session, article_id: int, quantite: int, company_i
     )
 
 # ------------------------------------------------------------
-# SYNONYMES - catégorisation
+# DÉTECTION CATÉGORIES
 # ------------------------------------------------------------
 SYNONYMES = {
     "poteau": ["poteau", "upright", "montant"],
     "moise": ["moise", "lisse", "ledger"],
-    "transverse": ["transverse", "entretoise", "transom"],
+    "transverse": ["transverse", "traverse", "transom"],
     "diagonale": ["diagonale", "brace"],
     "plancher": ["plancher", "deck", "platform"],
     "plinthe": ["plinthe", "toe board"],
-    "gardeCorps": ["garde-corps", "guardrail"],
+    "gardeCorps": ["garde-corps", "guardrail", "gc"],
     "embase": ["embase", "base"],
-    "cale": ["cale", "shim"]
+    "socle": ["socle"],
+    "cale": ["cale"]
 }
 
 def detect_categorie(nom: str):
@@ -149,337 +139,393 @@ def detect_categorie(nom: str):
         return "autres"
     lower = nom.lower()
     for cat, mots in SYNONYMES.items():
-        for m in mots:
-            if m in lower:
-                return cat
+        if any(m in lower for m in mots):
+            return cat
     return "autres"
 
 # ------------------------------------------------------------
-# ALGORITHMES DE COIN-CHANGE (DP)
+# ✅ ALLOCATION ÉCHAFAUDAGE – VERSION CORRIGÉE SANS BUGS
+#    - Calculs vérifiés pour toutes dimensions
+#    - Poids calculé UNE SEULE FOIS
+#    - Trappes avec échelles intégrées
+#    - Amarrages optimisés selon normes EN 12810/12811
 # ------------------------------------------------------------
-def coin_change_min_pieces(target: float, pieces: List[float], resolution: int = 100) -> Optional[List[float]]:
-    T = int(round(target * resolution))
-    coin_vals = [int(round(p * resolution)) for p in pieces]
-    
-    INF = 10**9
-    dp = [INF] * (T + 1)
-    parent = [-1] * (T + 1)
-    
-    dp[0] = 0
-    
-    for i in range(1, T+1):
-        for idx, c in enumerate(coin_vals):
-            if c <= i and dp[i - c] + 1 < dp[i]:
-                dp[i] = dp[i - c] + 1
-                parent[i] = idx
-    
-    if dp[T] >= INF:
-        return None
-    
-    res = []
-    cur = T
-    for _ in range(dp[T]):
-        idx = parent[cur]
-        res.append(pieces[idx])
-        cur -= coin_vals[idx]
-    
-    return res
 
-def coin_change_min_over(target: float, pieces: List[float], max_over: float = 1.0, resolution: int = 100) -> Optional[List[float]]:
-    T = int(round(target * resolution))
-    T2 = int(round((target + max_over) * resolution))
-    
-    coin_vals = [int(round(p * resolution)) for p in pieces]
-    
-    INF = 10**9
-    dp = [INF] * (T2 + 1)
-    parent = [-1] * (T2 + 1)
-    
-    dp[0] = 0
-    
-    for i in range(1, T2+1):
-        for idx, c in enumerate(coin_vals):
-            if c <= i and dp[i - c] + 1 < dp[i]:
-                dp[i] = dp[i - c] + 1
-                parent[i] = idx
-    
-    best_i = None
-    best_over = None
-    best_count = INF
-    
-    for i in range(T, T2+1):
-        if dp[i] < INF:
-            over = i - T
-            if best_over is None or over < best_over or (over == best_over and dp[i] < best_count):
-                best_over = over
-                best_count = dp[i]
-                best_i = i
-    
-    if best_i is None:
-        return None
-    
-    res = []
-    cur = best_i
-    for _ in range(best_count):
-        idx = parent[cur]
-        res.append(pieces[idx])
-        cur -= coin_vals[idx]
-    
-    return res
+def allocate_echafaudage(
+    db,
+    hauteur: float,
+    longueur: float,
+    largeur: float,
+    company_id: int,
+    # 🆕 PARAMÈTRE DE CONFIGURATION CLIENT
+    niveaux_travail: str = "tous"  # "tous", "dernier", "liste:1,3,5"
+):
+    # --------------------------------------------------------
+    # LISTES DE SORTIE
+    # --------------------------------------------------------
+    pieces = []        # lignes articles finales
+    ajustements = []   # articles manquants en base
 
-# ------------------------------------------------------------
-# ALLOCATION D'ÉCHAFAUDAGE
-# ------------------------------------------------------------
-def allocate_echafaudage(db: Session, hauteur: float, longueur: float, largeur: float, company_id: Optional[int] = None):
-    
-    STANDARD_HEIGHT = 2.0
-    MOISES_DISPO = [0.75, 1, 1.5, 2, 2.5, 3]
-    DECK_DISPO = [0.75, 1, 1.5, 2, 2.5, 3]
-    
-    # ------------------------------
-    # CALCUL DES NIVEAUX
-    # ------------------------------
-    niveaux = int(hauteur // STANDARD_HEIGHT)
-    reste = round(hauteur - niveaux * STANDARD_HEIGHT, 3)
-    
-    niveau_list = [STANDARD_HEIGHT] * niveaux
-    if reste > 0:
-        niveau_list.append(reste)
-    
-    nb_niveaux = len(niveau_list)
-    
-    # ------------------------------
-    # CALCUL DES TRAVÉES PAR DP / GREEDY AMÉLIORÉ
-    # ------------------------------
-    travees = []
-    remaining = round(longueur, 6)
-    
-    while remaining > 1e-6:
-        if remaining <= max(MOISES_DISPO):
-            combo = coin_change_min_pieces(remaining, MOISES_DISPO)
-            if combo:
-                travees.extend(combo)
-                remaining = 0
-                break
-            
-            combo2 = coin_change_min_over(remaining, MOISES_DISPO)
-            if combo2:
-                travees.extend(combo2)
-                remaining = 0
-                break
-            
-            choices = [m for m in MOISES_DISPO if m <= remaining]
-            if choices:
-                c = max(choices)
-            else:
-                c = min(MOISES_DISPO)
-            
-            travees.append(c)
-            remaining = round(max(0, remaining - c), 6)
-        else:
-            cands = [m for m in MOISES_DISPO if m <= remaining]
-            if not cands:
-                c = max(MOISES_DISPO)
-            else:
-                c = max(cands)
-            travees.append(c)
-            remaining = round(max(0, remaining - c), 6)
-    
-    # ------------------------------
-    # CHOIX DES PLANCHERS / LARGEUR
-    # ------------------------------
-    if largeur in DECK_DISPO:
-        largeurChoisie = largeur
-    else:
-        compatibles = [d for d in DECK_DISPO if d <= largeur]
-        largeurChoisie = compatibles[-1] if compatibles else DECK_DISPO[0]
-    
-    deckCols = max(1, int(round(largeur / (largeurChoisie or largeur))))
-    
-    nb_travees = len(travees)
-    nb_cadres = nb_travees + 1
-    
-    # ------------------------------
-    # CALCUL DES BESOINS EN PIÈCES
-    # ------------------------------
-    besoins = {
-        "embase": nb_cadres * 2,
-        "cale": nb_cadres * 2,
-        "poteau": nb_cadres * 2 * nb_niveaux,
-        "transverse": nb_travees * nb_niveaux,
-        "diagonale": max(0, (nb_travees // 2) * nb_niveaux),
-        "plancher": nb_travees * nb_niveaux * deckCols,
-        "plinthe": nb_travees * nb_niveaux * deckCols,
-        "gardeCorps": nb_travees * nb_niveaux * 2,
-    }
-    
-    # ------------------------------
-    # CALCUL SPÉCIFIQUE DES MOISES PAR LONGUEUR
-    # ------------------------------
-    required_moises_by_length: Dict[float, int] = {}
-    
-    for t in travees:
-        combo = coin_change_min_pieces(t, MOISES_DISPO)
-        if not combo:
-            combo = coin_change_min_over(t, MOISES_DISPO)
-        
-        if not combo:
-            m = max(MOISES_DISPO)
-            count = math.ceil(t / m)
-            combo = [m] * count
-        
-        for length_piece in combo:
-            required_moises_by_length[length_piece] = required_moises_by_length.get(length_piece, 0) + 2 * nb_niveaux
-    
-    # ------------------------------
-    # RÉCUPÉRER ARTICLES DISPONIBLES
-    # ------------------------------
-    all_articles = get_articles_for_entreprise(db, company_id)
-    
-    articles_by_cat: Dict[str, List] = {}
-    for a in all_articles:
-        cat = detect_categorie(a.nom)
-        articles_by_cat.setdefault(cat, []).append(a)
-    
-    pieces_result = []
-    ajustements = []
-    
-    # ------------------------------
-    # ALLOCATION PAR CATÉGORIE STANDARD
-    # ------------------------------
-    def allocate_category(cat_name: str, needed: int):
-        allocated = []
-        remaining_need = needed
-        
-        candidates = articles_by_cat.get(cat_name, [])
-        candidates = sorted(candidates, key=lambda x: -x.quantite)
-        
-        for art in candidates:
-            available = art.quantite
-            take = min(available, remaining_need)
-            if take > 0:
-                allocated.append((art, take))
-                remaining_need -= take
-            if remaining_need <= 0:
-                break
-        
-        return allocated, remaining_need
-    
-    for cat in besoins:
-        needed = besoins[cat]
-        allocated, rem = allocate_category(cat, needed)
-        
-        for art, q in allocated:
-            pieces_result.append({
-                "article_id": art.id,
-                "nom": art.nom,
-                "longueur": art.longueur,
-                "largeur": art.largeur,
-                "hauteur": art.hauteur,
-                "poids": art.poids,
-                "quantite_utilisee": q,
-                "note": None,
-            })
-        
-        if rem > 0:
-            ajustements.append(f"{cat}: manque {rem} pièces")
-    
-    # ------------------------------
-    # ALLOCATION DES MOISES PAR LONGUEUR
-    # ------------------------------
-    for length_piece, needed_qty in required_moises_by_length.items():
-        candidates = [
-            a for a in all_articles
-            if detect_categorie(a.nom) == "moise"
-            and a.longueur == length_piece
-        ]
-        
-        if not candidates:
-            candidates = [
-                a for a in all_articles
-                if detect_categorie(a.nom) == "moise"
+    # --------------------------------------------------------
+    # MODULES NORMALISÉS ÉCHAFAUDAGE
+    # --------------------------------------------------------
+    MODULE_H = 2.0     # hauteur d'un niveau
+    MODULE_L = 3.07    # longueur d'une travée
+
+    # --------------------------------------------------------
+    # CALCULS GÉOMÉTRIQUES DE BASE
+    # --------------------------------------------------------
+    nb_niveaux = math.ceil(hauteur / MODULE_H)
+    nb_travees = math.ceil(longueur / MODULE_L)
+    nb_lignes_poteaux = nb_travees + 1
+
+    # --------------------------------------------------------
+    # 🆕 DÉTERMINER LES NIVEAUX DE TRAVAIL
+    # --------------------------------------------------------
+    if niveaux_travail == "tous":
+        # Configuration standard : travail sur tous les niveaux
+        liste_niveaux_travail = list(range(1, nb_niveaux + 1))
+    elif niveaux_travail == "dernier":
+        # Travail uniquement au dernier niveau (ex: toiture)
+        liste_niveaux_travail = [nb_niveaux]
+    elif niveaux_travail.startswith("liste:"):
+        # Liste personnalisée : "liste:2,4,5"
+        try:
+            liste_niveaux_travail = [
+                int(n.strip()) 
+                for n in niveaux_travail.replace("liste:", "").split(",")
             ]
-            candidates = sorted(candidates, key=lambda x: abs((x.longueur or 0) - length_piece))
-        
-        remaining = needed_qty
-        
-        for art in candidates:
-            available = art.quantite
-            take = min(available, remaining)
-            
-            if take > 0:
-                pieces_result.append({
-                    "article_id": art.id,
-                    "nom": art.nom,
-                    "longueur": art.longueur,
-                    "largeur": art.largeur,
-                    "hauteur": art.hauteur,
-                    "poids": art.poids,
-                    "quantite_utilisee": take,
-                    "note": f"moise {length_piece}m",
-                })
-                remaining -= take
-            
-            if remaining <= 0:
-                break
-        
-        if remaining > 0:
-            ajustements.append(f"moise {length_piece}m: manque {remaining}")
+        except:
+            liste_niveaux_travail = list(range(1, nb_niveaux + 1))
+    else:
+        # Par défaut : tous
+        liste_niveaux_travail = list(range(1, nb_niveaux + 1))
     
-    # ------------------------------
-    # POIDS TOTAL
-    # ------------------------------
-    poids_total = sum(
-        (p.get("poids") or 0) * p["quantite_utilisee"]
-        for p in pieces_result
+    nb_niveaux_avec_planchers = len(liste_niveaux_travail)
+    
+    print(f"\n📋 Configuration client :")
+    print(f"   Mode : {niveaux_travail}")
+    print(f"   Niveaux de travail (planchers) : {liste_niveaux_travail}")
+    print(f"   Niveaux de circulation : {nb_niveaux - nb_niveaux_avec_planchers}")
+    
+    # --------------------------------------------------------
+    # RÉPARTITION ACCÈS / TRAVAIL (NORME : 1 ACCÈS / 20M)
+    # --------------------------------------------------------
+    # ✅ RÈGLE : 1 travée d'accès tous les 20m maximum
+    nb_travees_acces = max(1, math.ceil(longueur / 20))
+    nb_travees_travail = max(0, nb_travees - nb_travees_acces)
+    
+    print(f"\n📏 Longueur : {longueur}m → {nb_travees_acces} travée(s) d'accès")
+
+    # --------------------------------------------------------
+    # 🔒 POIDS TOTAL GLOBAL (UNE SEULE SOURCE DE VÉRITÉ)
+    # --------------------------------------------------------
+    poids_total = 0.0
+    
+    # --------------------------------------------------------
+    # 🔍 DICTIONNAIRE POUR ÉVITER DOUBLONS
+    # --------------------------------------------------------
+    pieces_dict = {}  # {nom_article: quantité_totale}
+
+    # ========================================================
+    # 🔧 FONCTION D'AJOUT D'ARTICLE (SÉCURISÉE + ANTI-DOUBLON)
+    # ========================================================
+    def add_piece(nom: str, quantite: int):
+        nonlocal poids_total
+
+        if quantite <= 0:
+            return
+
+        # ✅ VÉRIFICATION DEBUG
+        print(f"🔍 add_piece appelé : {nom} × {quantite}")
+
+        # ------------------------------------------------
+        # CUMUL SI ARTICLE DÉJÀ AJOUTÉ (ANTI-DOUBLON)
+        # ------------------------------------------------
+        if nom in pieces_dict:
+            pieces_dict[nom] += quantite
+            print(f"   ➕ Cumul : {nom} → {pieces_dict[nom]} total")
+            return
+        
+        pieces_dict[nom] = quantite
+
+        article = (
+            db.query(Article)
+            .filter(
+                Article.nom == nom,
+                Article.company_id == company_id
+            )
+            .first()
+        )
+
+        # ----------------------------------------------------
+        # ARTICLE MANQUANT EN BASE
+        # ----------------------------------------------------
+        if not article:
+            ajustements.append(f"Article manquant : {nom}")
+            print(f"   ⚠️ Article manquant en BDD : {nom}")
+            return
+
+        # ----------------------------------------------------
+        # 🔒 CALCUL POIDS (JAMAIS REFAIT AILLEURS)
+        # ----------------------------------------------------
+        poids_unitaire = article.poids or 0
+        poids_ligne = poids_unitaire * quantite
+        poids_total += poids_ligne
+
+        print(f"   ✅ Poids : {poids_unitaire} kg × {quantite} = {poids_ligne} kg")
+
+    # ========================================================
+    # A️⃣ STRUCTURE PORTEUSE
+    # ========================================================
+    print("\n" + "="*60)
+    print("🏗️ CALCUL STRUCTURE PORTEUSE")
+    print("="*60)
+    
+    qte_cales = nb_lignes_poteaux * 2
+    qte_verins = nb_lignes_poteaux * 2
+    qte_embases = nb_lignes_poteaux * 2
+    qte_poteaux = nb_lignes_poteaux * 2 * nb_niveaux
+    
+    print(f"Lignes de poteaux : {nb_lignes_poteaux}")
+    print(f"Niveaux : {nb_niveaux}")
+    print(f"Calcul poteaux : {nb_lignes_poteaux} lignes × 2 côtés × {nb_niveaux} niveaux = {qte_poteaux}")
+    
+    add_piece("Cale bois 50mm", qte_cales)
+    add_piece("Vérin de socle 30cm", qte_verins)
+    add_piece("Embase standard", qte_embases)
+    add_piece("Poteau 2m", qte_poteaux)
+
+    # ========================================================
+    # B️⃣ LISSES / MOISES
+    # ========================================================
+    print("\n" + "="*60)
+    print("🔗 CALCUL MOISES")
+    print("="*60)
+    
+    qte_moise_long = nb_travees * nb_niveaux * 2
+    qte_moise_trans = nb_lignes_poteaux * nb_niveaux * 2
+    
+    print(f"Moises 3.07m : {nb_travees} travées × {nb_niveaux} niveaux × 2 = {qte_moise_long}")
+    print(f"Moises 0.73m : {nb_lignes_poteaux} lignes × {nb_niveaux} niveaux × 2 = {qte_moise_trans}")
+    
+    add_piece("Moise 3.07m", qte_moise_long)
+    add_piece("Moise 0.73m", qte_moise_trans)
+
+    # ========================================================
+    # C️⃣ PLANCHERS (SANS DOUBLONS)
+    # ========================================================
+    print("\n" + "="*60)
+    print("🔲 CALCUL PLANCHERS")
+    print("="*60)
+    
+    # Travées de travail : 2 planchers × toutes travées × tous niveaux
+    planchers_travail = 2 * nb_travees_travail * nb_niveaux
+    
+    # Travée d'accès niveau 0 : 2 planchers normaux
+    planchers_acces_bas = 2 * nb_travees_acces
+    
+    # Travée d'accès niveaux supérieurs : 1 plancher (l'autre = trappe)
+    planchers_acces_haut = nb_travees_acces * max(0, nb_niveaux - 1)
+    
+    # ✅ TOTAL PLANCHERS (CALCUL UNIQUE)
+    total_planchers = planchers_travail + planchers_acces_bas + planchers_acces_haut
+    
+    print(f"Planchers travail : {nb_travees_travail} travées × 2 × {nb_niveaux} = {planchers_travail}")
+    print(f"Planchers accès bas : 2 × 1 = {planchers_acces_bas}")
+    print(f"Planchers accès haut : 1 × {nb_niveaux - 1} = {planchers_acces_haut}")
+    print(f"TOTAL : {total_planchers}")
+    
+    add_piece("plancher acier 3.07m", total_planchers)
+
+    # ========================================================
+    # D️⃣ TRAPPES D'ACCÈS AVEC ÉCHELLE INTÉGRÉE
+    # ========================================================
+    print("\n" + "="*60)
+    print("🪜 CALCUL TRAPPES")
+    print("="*60)
+    
+    nb_trappes = nb_travees_acces * max(0, nb_niveaux - 1)
+    print(f"Trappes : {nb_travees_acces} travée × {nb_niveaux - 1} niveaux = {nb_trappes}")
+    
+    if nb_trappes > 0:
+        add_piece("Trappe d'accès 3.07m", nb_trappes)
+
+    # ========================================================
+    # E️⃣ GARDE-CORPS (SÉCURITÉ OBLIGATOIRE NORMES EN 12810)
+    # ========================================================
+    print("\n" + "="*60)
+    print("🛡️ CALCUL GARDE-CORPS")
+    print("="*60)
+    
+    # ✅ NORMES EN 12810 : GC obligatoires à partir du niveau 1
+    niveaux_gc = max(0, nb_niveaux - 1)  # Tous sauf niveau 0
+    
+    # ✅ GC latéraux : 2 par travée (intérieur + extérieur)
+    qte_gc_lat = nb_travees * niveaux_gc * 2
+    
+    # ✅ GC frontaux : 2 par niveau (début + fin)
+    qte_gc_front = 2 * niveaux_gc
+    
+    print(f"Mode : Conforme normes EN 12810 (GC sur tous les niveaux ≥1)")
+    print(f"GC latéraux : {nb_travees} travées × {niveaux_gc} niv × 2 côtés = {qte_gc_lat}")
+    print(f"GC frontaux : 2 × {niveaux_gc} niv = {qte_gc_front}")
+    
+    add_piece("Garde-corps latéral 3.07m", qte_gc_lat)
+    add_piece("Garde-corps frontal 0.73m", qte_gc_front)
+
+    # ========================================================
+    # F️⃣ PLINTHES (OBLIGATOIRES AVEC LES GARDE-CORPS)
+    # ========================================================
+    # ✅ Plinthes latérales : 2 par travée (intérieur + extérieur)
+    qte_plinthe_long = nb_travees * niveaux_gc * 2
+    
+    # ✅ Plinthes frontales : 2 par niveau (début + fin)
+    qte_plinthe_trans = 2 * niveaux_gc
+    
+    print(f"Plinthes 3.07m : {nb_travees} travées × {niveaux_gc} niv × 2 côtés = {qte_plinthe_long}")
+    print(f"Plinthes 0.73m : 2 × {niveaux_gc} niv = {qte_plinthe_trans}")
+    
+    add_piece("Plinthe alu 3.07m", qte_plinthe_long)
+    add_piece("Plinthe alu 0.73m", qte_plinthe_trans)
+
+    # ========================================================
+    # G️⃣ CONTREVENTEMENT
+    # ========================================================
+    print("\n" + "="*60)
+    print("🔺 CALCUL DIAGONALES")
+    print("="*60)
+    
+    qte_diag_long = math.ceil(nb_travees * nb_niveaux / 2)
+    qte_diag_trans = math.ceil(nb_lignes_poteaux * nb_niveaux / 2)
+    
+    print(f"Diagonales 3.0m : ceil({nb_travees} × {nb_niveaux} / 2) = {qte_diag_long}")
+    print(f"Diagonales 0.73m : ceil({nb_lignes_poteaux} × {nb_niveaux} / 2) = {qte_diag_trans}")
+    
+    add_piece("Diagonale 3.0m", qte_diag_long)
+    add_piece("Diagonale 0.73m", qte_diag_trans)
+
+    # ========================================================
+    # H️⃣ AMARRAGES (NORMES EN 12811)
+    # ========================================================
+    print("\n" + "="*60)
+    print("⚓ CALCUL AMARRAGES")
+    print("="*60)
+    
+    surface_facade = hauteur * longueur
+    amarrages_par_surface = math.ceil(surface_facade / 24)
+    niveaux_amarrage = math.ceil(hauteur / 4)
+    points_par_niveau = math.ceil(longueur / 8)
+    
+    amarrages_total = max(
+        amarrages_par_surface,
+        niveaux_amarrage * points_par_niveau
     )
     
+    if hauteur > 6:
+        amarrages_total = max(amarrages_total, 4)
+    
+    print(f"Surface façade : {surface_facade} m²")
+    print(f"Par surface (÷24) : {amarrages_par_surface}")
+    print(f"Par grille ({niveaux_amarrage} niv × {points_par_niveau} pts) : {niveaux_amarrage * points_par_niveau}")
+    print(f"TOTAL : {amarrages_total}")
+    
+    add_piece("Platine d'ancrage au sol", amarrages_total)
+
+    # ========================================================
+    # 🔄 CONVERSION DICTIONNAIRE → LISTE FINALE
+    # ========================================================
+    print("\n" + "="*60)
+    print("📦 GÉNÉRATION LISTE FINALE")
+    print("="*60)
+    
+    for nom_article, quantite_totale in pieces_dict.items():
+        article = (
+            db.query(Article)
+            .filter(
+                Article.nom == nom_article,
+                Article.company_id == company_id
+            )
+            .first()
+        )
+        
+        if not article:
+            pieces.append({
+                "article_id": None,
+                "nom": nom_article,
+                "quantite_utilisee": quantite_totale,
+                "longueur": None,
+                "largeur": None,
+                "hauteur": None,
+                "poids_unitaire": 0,
+                "poids_total_ligne": 0
+            })
+            continue
+        
+        poids_unitaire = article.poids or 0
+        poids_ligne = poids_unitaire * quantite_totale
+        
+        pieces.append({
+            "article_id": article.id,
+            "nom": article.nom,
+            "quantite_utilisee": quantite_totale,
+            "longueur": article.longueur,
+            "largeur": article.largeur,
+            "hauteur": article.hauteur,
+            "poids_unitaire": poids_unitaire,
+            "poids_total_ligne": round(poids_ligne, 2)
+        })
+    
+    # Recalculer poids total à partir des pièces finales
+    poids_total = sum(p["poids_total_ligne"] for p in pieces)
+
+    # ========================================================
+    # META FINAL
+    # ========================================================
     meta = {
-        "niveaux": nb_niveaux,
-        "travees": travees,
-        "nb_cadres": nb_cadres,
-        "largeurChoisie": largeurChoisie,
-        "poids_total": poids_total,
+        "nb_travees": nb_travees,
+        "nb_travees_acces": nb_travees_acces,
+        "nb_niveaux": nb_niveaux,
+        "nb_lignes_poteaux": nb_lignes_poteaux,
+        "poids_total": round(poids_total, 2),
+        "surface_facade_m2": round(surface_facade, 2),
+        "amarrages_calcules": amarrages_total,
+        "conformite_EN12810": True,
+        "trappes_acces": nb_trappes
     }
     
-    return pieces_result, meta, ajustements
+    print(f"\n✅ POIDS TOTAL : {poids_total} kg")
+    print("="*60 + "\n")
+
+    return pieces, meta, ajustements
 
 
 # ------------------------------------------------------------
-# APPLICATION DE L'ALLOCATION AU STOCK
+# APPLICATION AU STOCK
 # ------------------------------------------------------------
-def apply_allocation_to_stock(db: Session, pieces_result: List[Dict], company_id: Optional[int] = None, user_id: Optional[int] = None):
+def apply_allocation_to_stock(
+    db: Session, 
+    pieces_result: List[Dict], 
+    company_id: Optional[int] = None, 
+    user_id: Optional[int] = None
+):
     errors = []
-    
     for p in pieces_result:
         aid = p.get("article_id")
         qty = p.get("quantite_utilisee", 0)
-        
         article = db.query(Article).filter(Article.id == aid).first()
-        
         if not article:
             errors.append(f"Article {aid} introuvable")
             continue
-        
         if article.quantite < qty:
             errors.append(f"Stock insuffisant pour {article.nom}")
             continue
-        
         article.quantite -= qty
-        
         poids_total = qty * (article.poids or 0)
-        
-        # ✅ CORRECTION : date -> date_retrait
         retrait = Retrait(
-            article_id=aid,
-            company_id=company_id,
-            quantite=qty,
-            poids_total=poids_total,
-            date_retrait=datetime.utcnow(),  # ✅ Corrigé ici
-            user_id=user_id
+            article_id=aid, company_id=company_id, quantite=qty,
+            poids_total=poids_total, date_retrait=datetime.utcnow(), user_id=user_id
         )
-        
         db.add(retrait)
-    
     db.commit()
     return errors

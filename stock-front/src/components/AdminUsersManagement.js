@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import api from "../api";
+import { createUserByAdmin } from "../api";
 import "../App.css";
 
 const AdminUsersManagement = ({ user }) => {
@@ -29,30 +30,39 @@ const AdminUsersManagement = ({ user }) => {
   };
 
   const handleCreateUser = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    try {
-      const result = await api.post("/admin/create-user", {
-        username,
-        email,
-        company_id: user.company_id,
-      });
-      
-      setMessage({
-        type: "success",
-        text: `Utilisateur "${result.username}" créé ! Mot de passe temporaire : ${result.temp_password} (envoyé par email à ${result.email})`,
-      });
-      
-      setUsername("");
-      setEmail("");
-      setShowCreate(false);
-      loadUsers();
-    } catch (err) {
-      setMessage({ type: "error", text: err.response?.data?.detail || "Erreur création utilisateur" });
-    } finally {
-      setLoading(false);
-    }
-  };
+  e.preventDefault();
+  setLoading(true);
+
+  try {
+    const result = await createUserByAdmin({
+      username: username,
+      email: email,
+      company_id: user.company_id,
+    });
+
+    setMessage({
+      type: "success",
+      text: `Utilisateur "${result.username}" créé !
+Email : ${result.email}
+Mot de passe temporaire envoyé par email`,
+    });
+
+    setUsername("");
+    setEmail("");
+    setShowCreate(false);
+    loadUsers();
+
+  } catch (err) {
+    console.error(err);
+    setMessage({
+      type: "error",
+      text: err.response?.data?.detail || "Erreur création utilisateur",
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <div className="card">

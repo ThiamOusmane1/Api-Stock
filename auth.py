@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from database import SessionLocal
-from models import User, RoleEnum
+from models import User, RoleEnum, CompanyStatusEnum
 import os
 from dotenv import load_dotenv
 
@@ -67,6 +67,15 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise credentials_exception
     
     print(f"✅ Utilisateur trouvé: {user.username}")  # ✅ DEBUG
+
+    # 🚫 BLOCAGE ENTREPRISE
+    if user.company:
+        if user.company.status != CompanyStatusEnum.ACTIVE:
+            raise HTTPException(
+                status_code=403,
+                detail="Entreprise suspendue ou résiliée"
+            )
+        
     return user
 
 def require_superadmin(user: User = Depends(get_current_user)):

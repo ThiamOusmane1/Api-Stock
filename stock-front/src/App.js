@@ -5,6 +5,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import ChangePasswordPage from "./pages/ChangePasswordPage";
 import Dashboard from "./pages/Dashboard";
+import HistoriqueChantiers from "./components/historiqueChantiers";
 import "./App.css";
 
 function App() {
@@ -33,6 +34,11 @@ function App() {
                 <Dashboard />
               </ProtectedRoute>
             }
+          />
+
+          <Route 
+            path="/historique-chantiers" 
+            element={<HistoriqueChantiers />} 
           />
           
           {/* Redirection par défaut vers dashboard */}

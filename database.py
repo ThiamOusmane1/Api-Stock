@@ -24,3 +24,11 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Base commune pour tous les modèles ORM
 Base = declarative_base()
+
+def get_db():
+    """Dépendance pour obtenir une session de base de données"""
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()

@@ -9,13 +9,29 @@ class RoleEnum(str, enum.Enum):
     ADMIN = "admin"
     USER = "user"
 
+class CompanyStatusEnum(str, enum.Enum):
+    ACTIVE = "active"
+    SUSPENDED = "suspended"
+    TERMINATED = "terminated"
+
+
 class Company(Base):
     __tablename__ = "companies"
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, unique=True, nullable=False, index=True)
+    status = Column(
+        Enum(CompanyStatusEnum),
+        default=CompanyStatusEnum.ACTIVE,
+        nullable=False
+    )
+    
+    suspended_at = Column(DateTime, nullable=True)
+    terminated_at = Column(DateTime, nullable=True)
+
     users = relationship("User", back_populates="company")
     articles = relationship("Article", back_populates="company")
     retraits = relationship("Retrait", back_populates="company")
+    chantiers = relationship("Chantier", back_populates="company")
 
 class User(Base):
     __tablename__ = "users"
@@ -28,6 +44,7 @@ class User(Base):
     # 🆕 NOUVEAUX CHAMPS pour gestion première connexion
     first_login = Column(Boolean, default=True)  # True = doit changer son mot de passe
     password_reset_required = Column(Boolean, default=False)  # Pour reset forcé
+    is_active = Column(Boolean, default=True)  # True = actif, False = suspendu
     email = Column(String, nullable=True)  # Pour envoi mot de passe
     created_at = Column(DateTime, default=datetime.utcnow)
     
@@ -65,3 +82,21 @@ class Retrait(Base):
     article = relationship("Article", back_populates="retraits")
     company = relationship("Company", back_populates="retraits")
     user = relationship("User", back_populates="retraits")
+
+    # 🆕 NOUVEAU MODÈLE
+class Chantier(Base):
+    __tablename__ = "chantiers"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    company_id = Column(Integer, ForeignKey("companies.id"))
+    nom_chantier = Column(String, nullable=False)
+    duree_location = Column(Integer)  # en jours
+    hauteur = Column(Float)
+    longueur = Column(Float)
+    largeur = Column(Float)
+    niveaux_travail = Column(String)
+    date_creation = Column(DateTime, default=datetime.utcnow)
+    poids_total = Column(Float)
+    
+    company = relationship("Company", back_populates="chantiers")
+
