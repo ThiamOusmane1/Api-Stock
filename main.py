@@ -63,8 +63,8 @@ def create_default_superadmin():
 origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    # Ajouter l'URL de prod ici lors du déploiement
-    # "https://mon-front.railway.app",
+    "https://api-stock-echafaudages.onrender.com",
+    "https://api-stock-echafaudages.vercel.app",
 ]
 app.add_middleware(
     CORSMiddleware,
