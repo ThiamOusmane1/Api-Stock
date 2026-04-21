@@ -4,6 +4,8 @@ import jsPDF from "jspdf";
 import "jspdf-autotable";
 import "../App.css";
 
+const API_URL = process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:8000";
+
 const HistoriqueChantiers = () => {
   const [chantiers, setChantiers] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -17,6 +19,7 @@ const HistoriqueChantiers = () => {
   };
 
   // Charger les chantiers
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadChantiers();
   }, []);
@@ -25,7 +28,7 @@ const HistoriqueChantiers = () => {
     setLoading(true);
     try {
       const token = JSON.parse(localStorage.getItem("user")).access_token;
-      const response = await fetch("http://127.0.0.1:8000/chantiers/", {
+      const response = await fetch(`${API_URL}/chantiers/`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -53,7 +56,7 @@ const HistoriqueChantiers = () => {
 
     try {
       const token = JSON.parse(localStorage.getItem("user")).access_token;
-      const response = await fetch(`http://127.0.0.1:8000/chantiers/${id}`, {
+      const response = await fetch(`${API_URL}/chantiers/${id}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
