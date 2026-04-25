@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useContext } from "react";
 import { AuthContext } from "../AuthContext";
-import { fetchCompanies, createCompany, createAdmin, companyAction } from "../api"; // ✅ companyAction importé
+import { fetchCompanies, createCompany, createAdmin, companyAction } from "../api";
 import "../App.css";
+
+const API_URL = process.env.REACT_APP_API_BASE_URL || "http://127.0.0.1:8000";
 
 const SuperAdminDashboard = ({ user }) => {
   const { logout } = useContext(AuthContext);
@@ -19,6 +21,7 @@ const SuperAdminDashboard = ({ user }) => {
   const [adminEmail, setAdminEmail] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadCompanies();
     loadAdmins();
@@ -39,7 +42,8 @@ const SuperAdminDashboard = ({ user }) => {
 
   const loadAdmins = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8000/admin/list-admins", {
+      // ✅ CORRIGÉ : URL dynamique
+      const response = await fetch(`${API_URL}/admin/list-admins`, {
         headers: {
           Authorization: `Bearer ${JSON.parse(localStorage.getItem("user")).access_token}`,
         },
@@ -76,13 +80,12 @@ const SuperAdminDashboard = ({ user }) => {
         email: adminEmail,
         company_id: parseInt(selectedCompanyId),
       });
-      
+
       setMessage({
         type: "success",
-        text: `Administrateur "${result.username}" créé avec succès.
-      Un email contenant les identifiants temporaires a été envoyé à ${result.email}.`,
+        text: `Administrateur "${result.username}" créé avec succès. Un email contenant les identifiants temporaires a été envoyé à ${result.email}.`,
       });
-      
+
       setAdminUsername("");
       setAdminEmail("");
       setSelectedCompanyId("");
@@ -95,34 +98,67 @@ const SuperAdminDashboard = ({ user }) => {
     }
   };
 
-  // ✅ CORRIGÉ : Utilise la fonction companyAction d'api.js
+  // ✅ NOUVEAU : Supprimer un admin
+  const handleDeleteAdmin = async (adminId, adminUsername) => {
+    if (!window.confirm(`Confirmer la suppression de l'admin "${adminUsername}" ?`)) return;
+
+    try {
+      const response = await fetch(`${API_URL}/admin/users/${adminId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${JSON.parse(localStorage.getItem("user")).access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.detail || "Erreur suppression");
+      }
+
+      setMessage({ type: "success", text: `Admin "${adminUsername}" supprimé avec succès` });
+      loadAdmins();
+    } catch (err) {
+      setMessage({ type: "error", text: err.message || "Erreur lors de la suppression" });
+    }
+  };
+
   const handleCompanyAction = async (companyId, actionType) => {
     setLoading(true);
     try {
-      // ✅ On utilise la fonction centralisée
       await companyAction(companyId, actionType);
-      
+
       const actionLabels = {
         suspend: "suspendue",
         activate: "réactivée",
         terminate: "résiliée"
       };
-      
-      setMessage({ 
-        type: "success", 
-        text: `✅ Entreprise ${actionLabels[actionType]} avec succès` 
+
+      setMessage({
+        type: "success",
+        text: `✅ Entreprise ${actionLabels[actionType]} avec succès`
       });
-      
+
       loadCompanies();
     } catch (err) {
       console.error("Erreur action entreprise:", err);
-      setMessage({ 
-        type: "error", 
-        text: err.response?.data?.detail || "Erreur lors de l'action sur l'entreprise" 
+      setMessage({
+        type: "error",
+        text: err.response?.data?.detail || "Erreur lors de l'action sur l'entreprise"
       });
     } finally {
       setLoading(false);
     }
+  };
+
+  // Badge statut entreprise
+  const statusBadge = (status) => {
+    const styles = {
+      active: { backgroundColor: "#d4edda", color: "#155724", padding: "3px 8px", borderRadius: 12, fontSize: 12 },
+      suspended: { backgroundColor: "#fff3cd", color: "#856404", padding: "3px 8px", borderRadius: 12, fontSize: 12 },
+      terminated: { backgroundColor: "#f8d7da", color: "#721c24", padding: "3px 8px", borderRadius: 12, fontSize: 12 },
+    };
+    const labels = { active: "✅ Active", suspended: "⏸ Suspendue", terminated: "🗑️ Résiliée" };
+    return <span style={styles[status] || styles.active}>{labels[status] || status}</span>;
   };
 
   return (
@@ -164,6 +200,7 @@ const SuperAdminDashboard = ({ user }) => {
 
       {/* Contenu */}
       <main className="dashboard-content">
+
         {/* ONGLET ENTREPRISES */}
         {currentTab === "companies" && (
           <div className="card">
@@ -213,7 +250,8 @@ const SuperAdminDashboard = ({ user }) => {
                     <tr>
                       <th>ID</th>
                       <th>Nom de l'entreprise</th>
-                      <th>Nombre d'admins</th>
+                      <th>Statut</th>
+                      <th>Admins</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -224,6 +262,7 @@ const SuperAdminDashboard = ({ user }) => {
                         <tr key={company.id}>
                           <td>{company.id}</td>
                           <td><strong>{company.name}</strong></td>
+                          <td>{statusBadge(company.status)}</td>
                           <td>{companyAdmins.length}</td>
                           <td>
                             <button
@@ -245,7 +284,7 @@ const SuperAdminDashboard = ({ user }) => {
                             <button
                               onClick={() => handleCompanyAction(company.id, "terminate")}
                               className="btn-action terminate"
-                              style={{ fontSize: "12px", backgroundColor: "#dc3545" }}
+                              style={{ fontSize: "12px", backgroundColor: "#dc3545", marginRight: "5px" }}
                               disabled={loading}
                             >
                               🗑️ Résilier
@@ -257,7 +296,7 @@ const SuperAdminDashboard = ({ user }) => {
                                 setCurrentTab("admins");
                               }}
                               className="btn-add"
-                              style={{ fontSize: "12px", padding: "6px 12px", marginLeft: "5px" }}
+                              style={{ fontSize: "12px", padding: "6px 12px" }}
                             >
                               ➕ Créer un admin
                             </button>
@@ -344,6 +383,7 @@ const SuperAdminDashboard = ({ user }) => {
                       <th>Entreprise</th>
                       <th>Date création</th>
                       <th>Première connexion</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -352,7 +392,7 @@ const SuperAdminDashboard = ({ user }) => {
                         <td>{admin.id}</td>
                         <td><strong>{admin.username}</strong></td>
                         <td>{admin.email || "-"}</td>
-                        <td>{admin.company_name || "-"}</td>
+                        <td>{admin.company_name || <span style={{ color: "red" }}>⚠️ Sans entreprise</span>}</td>
                         <td>
                           {admin.created_at
                             ? new Date(admin.created_at).toLocaleDateString("fr-FR")
@@ -364,6 +404,23 @@ const SuperAdminDashboard = ({ user }) => {
                           ) : (
                             <span style={{ color: "green" }}>✅ Non</span>
                           )}
+                        </td>
+                        {/* ✅ NOUVEAU : Bouton supprimer */}
+                        <td>
+                          <button
+                            onClick={() => handleDeleteAdmin(admin.id, admin.username)}
+                            style={{
+                              padding: "4px 10px",
+                              backgroundColor: "#dc3545",
+                              color: "white",
+                              border: "none",
+                              borderRadius: 4,
+                              cursor: "pointer",
+                              fontSize: "12px"
+                            }}
+                          >
+                            🗑️ Supprimer
+                          </button>
                         </td>
                       </tr>
                     ))}
