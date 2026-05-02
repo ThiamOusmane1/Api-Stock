@@ -3,6 +3,7 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -11,6 +12,7 @@ body {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
   color: #333;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ===================== LOGIN PAGE ===================== */
@@ -103,6 +105,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.2s, box-shadow 0.2s;
+  min-height: 48px;
 }
 
 .btn-primary:hover:not(:disabled) {
@@ -144,7 +147,7 @@ body {
   align-items: center;
   position: sticky;
   top: 0;
-  z-index: 100;
+  z-index: 200;
 }
 
 .header-left h1 {
@@ -169,13 +172,14 @@ body {
   cursor: pointer;
   transition: background 0.3s;
   white-space: nowrap;
+  min-height: 44px;
 }
 
 .btn-logout:hover {
   background: #c82333;
 }
 
-/* ===================== NAVIGATION ===================== */
+/* ===================== NAVIGATION DESKTOP ===================== */
 .dashboard-nav {
   background: white;
   padding: 0 40px;
@@ -191,6 +195,22 @@ body {
   display: none;
 }
 
+/* Alias pour la nav desktop dans les nouveaux composants */
+.desktop-nav {
+  background: white;
+  padding: 0 40px;
+  display: flex;
+  gap: 5px;
+  border-bottom: 2px solid #f0f0f0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.desktop-nav::-webkit-scrollbar {
+  display: none;
+}
+
 .nav-btn {
   background: transparent;
   border: none;
@@ -203,6 +223,7 @@ body {
   transition: all 0.3s;
   white-space: nowrap;
   flex-shrink: 0;
+  min-height: 48px;
 }
 
 .nav-btn:hover {
@@ -213,6 +234,61 @@ body {
 .nav-btn.active {
   color: #667eea;
   border-bottom-color: #667eea;
+}
+
+/* ===================== NAVIGATION MOBILE FIXE EN BAS ===================== */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: white;
+  border-top: 1px solid #e8e8e8;
+  box-shadow: 0 -2px 20px rgba(0, 0, 0, 0.1);
+  z-index: 300;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.mobile-nav-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #aaa;
+  transition: color 0.2s;
+  min-height: 56px;
+}
+
+.mobile-nav-btn:active {
+  background: #f5f5f5;
+}
+
+.mobile-nav-btn.active {
+  color: #667eea;
+}
+
+.mobile-nav-icon {
+  font-size: 24px;
+  display: block;
+  line-height: 1;
+  transition: transform 0.2s;
+}
+
+.mobile-nav-btn.active .mobile-nav-icon {
+  transform: scale(1.1);
+}
+
+.mobile-nav-label {
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 3px;
+  letter-spacing: 0.2px;
 }
 
 /* ===================== DASHBOARD CONTENT ===================== */
@@ -266,6 +342,7 @@ body {
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
 }
 
 .table-header {
@@ -289,6 +366,7 @@ body {
   font-size: 14px;
   width: 280px;
   transition: border-color 0.3s;
+  min-height: 44px;
 }
 
 .input-search:focus {
@@ -315,6 +393,8 @@ body {
   font-size: 14px;
   flex: 1;
   min-width: 120px;
+  min-height: 44px;
+  background: white;
 }
 
 .input-ajout:focus {
@@ -333,6 +413,7 @@ body {
   cursor: pointer;
   transition: all 0.3s;
   white-space: nowrap;
+  min-height: 44px;
 }
 
 .btn-add {
@@ -364,6 +445,8 @@ body {
 
 /* ===================== TOGGLE & CATEGORIES ===================== */
 .toggle-stock {
+  display: block;
+  width: 100%;
   margin: 20px 0;
   padding: 12px 24px;
   background: #667eea;
@@ -373,6 +456,7 @@ body {
   font-weight: 600;
   cursor: pointer;
   transition: background 0.3s;
+  min-height: 48px;
 }
 
 .toggle-stock:hover {
@@ -394,9 +478,15 @@ body {
   font-size: 15px;
   text-transform: uppercase;
   letter-spacing: 1px;
+  cursor: pointer;
+  user-select: none;
 }
 
 /* ===================== TABLES ===================== */
+.desktop-table {
+  display: block;
+}
+
 .table-container {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -447,10 +537,56 @@ tbody tr:hover {
   cursor: pointer;
   font-size: 18px;
   transition: transform 0.2s;
+  min-height: 44px;
+  min-width: 44px;
 }
 
 .btn-remove:hover {
   transform: scale(1.2);
+}
+
+/* ===================== CARTES MOBILE ===================== */
+/* Affichées sur mobile à la place des tableaux */
+.mobile-cards {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mobile-card {
+  background: #f8f9ff;
+  border-radius: 10px;
+  padding: 14px;
+  border: 1px solid #e0e0e0;
+}
+
+.mobile-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.mobile-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  color: #555;
+  margin-bottom: 12px;
+}
+
+.mobile-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.mobile-card-actions button {
+  min-height: 36px;
+  border-radius: 6px;
 }
 
 /* ===================== MODAL ===================== */
@@ -473,6 +609,7 @@ tbody tr:hover {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
 
@@ -491,6 +628,7 @@ tbody tr:hover {
   font-weight: 600;
   cursor: pointer;
   transition: background 0.3s;
+  min-height: 44px;
 }
 
 .btn-export:hover {
@@ -542,6 +680,7 @@ tbody tr:hover {
   color: white;
   transition: all 0.2s;
   white-space: nowrap;
+  min-height: 36px;
 }
 
 .btn-action:hover {
@@ -566,7 +705,8 @@ tbody tr:hover {
     padding: 12px 25px;
   }
 
-  .dashboard-nav {
+  .dashboard-nav,
+  .desktop-nav {
     padding: 0 25px;
   }
 }
@@ -574,15 +714,33 @@ tbody tr:hover {
 /* ===================== RESPONSIVE MOBILE ===================== */
 @media (max-width: 768px) {
 
+  /* Afficher nav mobile en bas, cacher nav desktop */
+  .mobile-nav { display: flex; }
+  .desktop-nav { display: none; }
+  .dashboard-nav { display: none; }
+
+  /* Afficher cartes mobile, cacher tableaux */
+  .mobile-cards { display: flex; }
+  .desktop-table { display: none; }
+
+  /* Espace pour la barre fixe en bas + iPhone encoche */
+  .dashboard-container {
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));
+  }
+
   /* Header */
   .dashboard-header {
-    padding: 12px 15px;
+    padding: 10px 16px;
     flex-wrap: wrap;
     gap: 10px;
   }
 
   .header-left h1 {
-    font-size: 16px;
+    font-size: 15px;
+    max-width: 60vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .user-info {
@@ -591,17 +749,6 @@ tbody tr:hover {
 
   .btn-logout {
     padding: 7px 12px;
-    font-size: 12px;
-  }
-
-  /* Navigation */
-  .dashboard-nav {
-    padding: 0 10px;
-    gap: 0;
-  }
-
-  .nav-btn {
-    padding: 10px 12px;
     font-size: 12px;
   }
 
@@ -624,17 +771,9 @@ tbody tr:hover {
     text-align: center;
   }
 
-  .stat-icon {
-    font-size: 28px;
-  }
-
-  .stat-value {
-    font-size: 22px;
-  }
-
-  .stat-content h3 {
-    font-size: 11px;
-  }
+  .stat-icon { font-size: 28px; }
+  .stat-value { font-size: 22px; }
+  .stat-content h3 { font-size: 11px; }
 
   /* Card */
   .card {
@@ -649,13 +788,11 @@ tbody tr:hover {
     margin-bottom: 12px;
   }
 
-  .table-header h2 {
-    font-size: 16px;
-  }
+  .table-header h2 { font-size: 16px; }
 
   .input-search {
     width: 100%;
-    font-size: 13px;
+    font-size: 16px; /* Évite le zoom automatique iOS */
   }
 
   /* Formulaires */
@@ -668,19 +805,20 @@ tbody tr:hover {
 
   .input-ajout {
     width: 100%;
-    font-size: 13px;
-    padding: 10px 12px;
+    font-size: 16px; /* Évite le zoom automatique iOS */
+    padding: 12px;
+    min-width: unset;
   }
 
   .btn-add,
   .btn-calc,
   .btn-reset {
     width: 100%;
-    padding: 12px;
-    font-size: 14px;
+    padding: 13px;
+    font-size: 15px;
   }
 
-  /* Tables */
+  /* Tables (scroll horizontal) */
   .table-container {
     margin: 0 -12px;
     border-radius: 0;
@@ -696,31 +834,27 @@ tbody tr:hover {
     font-size: 12px;
   }
 
-  th {
-    font-size: 10px;
-  }
+  th { font-size: 10px; }
 
-  /* Boutons dans les tables */
   .btn-action {
     padding: 4px 8px;
     font-size: 11px;
   }
 
-  /* Modal */
+  /* Modal depuis le bas (style sheet iOS) */
   .modal-overlay {
-    padding: 10px;
+    padding: 0;
     align-items: flex-end;
   }
 
   .modal-content {
-    border-radius: 12px 12px 0 0;
-    max-height: 85vh;
-    padding: 15px;
+    border-radius: 16px 16px 0 0;
+    max-height: 92vh;
+    padding: 20px 16px;
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   }
 
-  .modal-content h3 {
-    font-size: 16px;
-  }
+  .modal-content h3 { font-size: 16px; }
 
   /* Login */
   .login-card {
@@ -728,27 +862,33 @@ tbody tr:hover {
     border-radius: 12px;
   }
 
-  .login-header h1 {
-    font-size: 24px;
+  .login-header h1 { font-size: 24px; }
+
+  .form-group input {
+    font-size: 16px; /* Évite le zoom automatique iOS */
   }
 }
 
 /* ===================== RESPONSIVE TRÈS PETIT ÉCRAN ===================== */
 @media (max-width: 400px) {
-  .stats-grid {
-    grid-template-columns: 1fr;
+  .stats-grid { grid-template-columns: 1fr; }
+  .header-left h1 { font-size: 13px; }
+  .nav-btn { padding: 8px 10px; font-size: 11px; }
+  .table-header h2 { font-size: 15px; }
+  .mobile-nav-label { font-size: 9px; }
+  .mobile-nav-icon { font-size: 20px; }
+}
+
+/* ===================== DESKTOP : modal centrée ===================== */
+@media (min-width: 769px) {
+  .modal-overlay {
+    align-items: center;
+    padding: 20px;
   }
 
-  .header-left h1 {
-    font-size: 14px;
-  }
-
-  .nav-btn {
-    padding: 8px 10px;
-    font-size: 11px;
-  }
-
-  .table-header h2 {
-    font-size: 15px;
+  .modal-content {
+    border-radius: 12px;
+    max-width: 900px;
+    max-height: 85vh;
   }
 }

@@ -14,12 +14,15 @@ const SuperAdminDashboard = ({ user }) => {
   const [showCreateCompany, setShowCreateCompany] = useState(false);
   const [showCreateAdmin, setShowCreateAdmin] = useState(false);
   const [message, setMessage] = useState(null);
-
-  // Form states
   const [companyName, setCompanyName] = useState("");
   const [adminUsername, setAdminUsername] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [selectedCompanyId, setSelectedCompanyId] = useState("");
+
+  const tabs = [
+    { id: "companies", label: "Entreprises", icon: "🏢" },
+    { id: "admins", label: "Admins", icon: "👨‍💼" },
+  ];
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -33,7 +36,6 @@ const SuperAdminDashboard = ({ user }) => {
       const data = await fetchCompanies();
       setCompanies(data);
     } catch (err) {
-      console.error("Erreur chargement entreprises:", err);
       setMessage({ type: "error", text: "Erreur de chargement des entreprises" });
     } finally {
       setLoading(false);
@@ -42,7 +44,6 @@ const SuperAdminDashboard = ({ user }) => {
 
   const loadAdmins = async () => {
     try {
-      // ✅ CORRIGÉ : URL dynamique
       const response = await fetch(`${API_URL}/admin/list-admins`, {
         headers: {
           Authorization: `Bearer ${JSON.parse(localStorage.getItem("user")).access_token}`,
@@ -80,12 +81,7 @@ const SuperAdminDashboard = ({ user }) => {
         email: adminEmail,
         company_id: parseInt(selectedCompanyId),
       });
-
-      setMessage({
-        type: "success",
-        text: `Administrateur "${result.username}" créé avec succès. Un email contenant les identifiants temporaires a été envoyé à ${result.email}.`,
-      });
-
+      setMessage({ type: "success", text: `Admin "${result.username}" créé ! Email envoyé à ${result.email}.` });
       setAdminUsername("");
       setAdminEmail("");
       setSelectedCompanyId("");
@@ -98,10 +94,8 @@ const SuperAdminDashboard = ({ user }) => {
     }
   };
 
-  // ✅ NOUVEAU : Supprimer un admin
-  const handleDeleteAdmin = async (adminId, adminUsername) => {
-    if (!window.confirm(`Confirmer la suppression de l'admin "${adminUsername}" ?`)) return;
-
+  const handleDeleteAdmin = async (adminId, adminName) => {
+    if (!window.confirm(`Supprimer l'admin "${adminName}" ?`)) return;
     try {
       const response = await fetch(`${API_URL}/admin/users/${adminId}`, {
         method: "DELETE",
@@ -109,16 +103,14 @@ const SuperAdminDashboard = ({ user }) => {
           Authorization: `Bearer ${JSON.parse(localStorage.getItem("user")).access_token}`,
         },
       });
-
       if (!response.ok) {
         const err = await response.json();
         throw new Error(err.detail || "Erreur suppression");
       }
-
-      setMessage({ type: "success", text: `Admin "${adminUsername}" supprimé avec succès` });
+      setMessage({ type: "success", text: `Admin "${adminName}" supprimé` });
       loadAdmins();
     } catch (err) {
-      setMessage({ type: "error", text: err.message || "Erreur lors de la suppression" });
+      setMessage({ type: "error", text: err.message });
     }
   };
 
@@ -126,36 +118,21 @@ const SuperAdminDashboard = ({ user }) => {
     setLoading(true);
     try {
       await companyAction(companyId, actionType);
-
-      const actionLabels = {
-        suspend: "suspendue",
-        activate: "réactivée",
-        terminate: "résiliée"
-      };
-
-      setMessage({
-        type: "success",
-        text: `✅ Entreprise ${actionLabels[actionType]} avec succès`
-      });
-
+      const labels = { suspend: "suspendue", activate: "réactivée", terminate: "résiliée" };
+      setMessage({ type: "success", text: `✅ Entreprise ${labels[actionType]}` });
       loadCompanies();
     } catch (err) {
-      console.error("Erreur action entreprise:", err);
-      setMessage({
-        type: "error",
-        text: err.response?.data?.detail || "Erreur lors de l'action sur l'entreprise"
-      });
+      setMessage({ type: "error", text: err.response?.data?.detail || "Erreur action entreprise" });
     } finally {
       setLoading(false);
     }
   };
 
-  // Badge statut entreprise
   const statusBadge = (status) => {
     const styles = {
-      active: { backgroundColor: "#d4edda", color: "#155724", padding: "3px 8px", borderRadius: 12, fontSize: 12 },
-      suspended: { backgroundColor: "#fff3cd", color: "#856404", padding: "3px 8px", borderRadius: 12, fontSize: 12 },
-      terminated: { backgroundColor: "#f8d7da", color: "#721c24", padding: "3px 8px", borderRadius: 12, fontSize: 12 },
+      active:     { background: "#d4edda", color: "#155724", padding: "2px 8px", borderRadius: 10, fontSize: 12 },
+      suspended:  { background: "#fff3cd", color: "#856404", padding: "2px 8px", borderRadius: 10, fontSize: 12 },
+      terminated: { background: "#f8d7da", color: "#721c24", padding: "2px 8px", borderRadius: 10, fontSize: 12 },
     };
     const labels = { active: "✅ Active", suspended: "⏸ Suspendue", terminated: "🗑️ Résiliée" };
     return <span style={styles[status] || styles.active}>{labels[status] || status}</span>;
@@ -163,54 +140,47 @@ const SuperAdminDashboard = ({ user }) => {
 
   return (
     <div className="dashboard-container">
-      {/* Header */}
+
+      {/* ===== HEADER ===== */}
       <header className="dashboard-header">
         <div className="header-left">
-          <h1>👑 Dashboard SUPERADMIN</h1>
-          <p className="user-info">Bienvenue, <strong>{user.username}</strong></p>
+          <h1>👑 SuperAdmin</h1>
+          <p className="user-info"><strong>{user.username}</strong></p>
         </div>
-        <button onClick={logout} className="btn-logout">
-          🚪 Déconnexion
-        </button>
+        <button onClick={logout} className="btn-logout">🚪 Déconnexion</button>
       </header>
 
-      {/* Navigation */}
-      <nav className="dashboard-nav">
-        <button
-          className={currentTab === "companies" ? "nav-btn active" : "nav-btn"}
-          onClick={() => setCurrentTab("companies")}
-        >
-          🏢 Entreprises
-        </button>
-        <button
-          className={currentTab === "admins" ? "nav-btn active" : "nav-btn"}
-          onClick={() => setCurrentTab("admins")}
-        >
-          👨‍💼 Admins
-        </button>
+      {/* ===== NAV DESKTOP ===== */}
+      <nav className="dashboard-nav desktop-nav">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            className={currentTab === tab.id ? "nav-btn active" : "nav-btn"}
+            onClick={() => setCurrentTab(tab.id)}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
       </nav>
 
-      {/* Message */}
+      {/* ===== MESSAGE ===== */}
       {message && (
-        <div className={`message ${message.type}`} style={{ margin: "20px 40px" }}>
+        <div className={`message ${message.type}`} style={{ margin: "12px 20px" }}>
           {message.text}
-          <button onClick={() => setMessage(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer" }}>✕</button>
+          <button onClick={() => setMessage(null)} style={{ float: "right", background: "none", border: "none", cursor: "pointer", fontSize: 16 }}>✕</button>
         </div>
       )}
 
-      {/* Contenu */}
+      {/* ===== CONTENU ===== */}
       <main className="dashboard-content">
 
-        {/* ONGLET ENTREPRISES */}
+        {/* ---- ONGLET ENTREPRISES ---- */}
         {currentTab === "companies" && (
           <div className="card">
             <div className="table-header">
-              <h2>📋 Liste des entreprises</h2>
-              <button
-                onClick={() => setShowCreateCompany(!showCreateCompany)}
-                className="btn-add"
-              >
-                ➕ Créer une entreprise
+              <h2>📋 Entreprises</h2>
+              <button className="btn-add" onClick={() => setShowCreateCompany(!showCreateCompany)}>
+                ➕ Nouvelle entreprise
               </button>
             </div>
 
@@ -225,102 +195,107 @@ const SuperAdminDashboard = ({ user }) => {
                   required
                 />
                 <button type="submit" className="btn-add" disabled={loading}>
-                  {loading ? "Création..." : "Créer"}
+                  {loading ? "⏳..." : "Créer"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateCompany(false)}
-                  className="btn-reset"
-                >
+                <button type="button" onClick={() => setShowCreateCompany(false)} className="btn-reset">
                   Annuler
                 </button>
               </form>
             )}
 
-            {loading && <p>⏳ Chargement...</p>}
+            {loading && <p style={{ padding: 10, color: "#666" }}>⏳ Chargement...</p>}
 
             {companies.length === 0 ? (
-              <p style={{ textAlign: "center", padding: "40px", color: "#666" }}>
-                Aucune entreprise enregistrée
-              </p>
-            ) : (
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Nom de l'entreprise</th>
-                      <th>Statut</th>
-                      <th>Admins</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {companies.map((company) => {
-                      const companyAdmins = admins.filter(a => a.company_id === company.id);
-                      return (
-                        <tr key={company.id}>
-                          <td>{company.id}</td>
-                          <td><strong>{company.name}</strong></td>
-                          <td>{statusBadge(company.status)}</td>
-                          <td>{companyAdmins.length}</td>
-                          <td>
-                            <button
-                              onClick={() => handleCompanyAction(company.id, "suspend")}
-                              className="btn-action"
-                              style={{ fontSize: "12px", marginRight: "5px" }}
-                              disabled={loading}
-                            >
-                              ⏸️ Suspendre
-                            </button>
-                            <button
-                              onClick={() => handleCompanyAction(company.id, "activate")}
-                              className="btn-action"
-                              style={{ fontSize: "12px", marginRight: "5px" }}
-                              disabled={loading}
-                            >
-                              ▶️ Réactiver
-                            </button>
-                            <button
-                              onClick={() => handleCompanyAction(company.id, "terminate")}
-                              className="btn-action terminate"
-                              style={{ fontSize: "12px", backgroundColor: "#dc3545", marginRight: "5px" }}
-                              disabled={loading}
-                            >
-                              🗑️ Résilier
-                            </button>
-                            <button
-                              onClick={() => {
-                                setSelectedCompanyId(company.id);
-                                setShowCreateAdmin(true);
-                                setCurrentTab("admins");
-                              }}
-                              className="btn-add"
-                              style={{ fontSize: "12px", padding: "6px 12px" }}
-                            >
-                              ➕ Créer un admin
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div style={{ textAlign: "center", padding: 40, color: "#666" }}>
+                <p style={{ fontSize: 40, marginBottom: 10 }}>🏢</p>
+                <p>Aucune entreprise enregistrée</p>
+                <p style={{ fontSize: 13, marginTop: 5 }}>Créez votre première entreprise ci-dessus</p>
               </div>
+            ) : (
+              <>
+                {/* Vue MOBILE : cartes */}
+                <div className="mobile-cards">
+                  {companies.map((company) => {
+                    const nbAdmins = admins.filter((a) => a.company_id === company.id).length;
+                    return (
+                      <div key={company.id} className="mobile-card">
+                        <div className="mobile-card-header">
+                          <strong>{company.name}</strong>
+                          {statusBadge(company.status)}
+                        </div>
+                        <div className="mobile-card-body">
+                          <span>👨‍💼 {nbAdmins} admin(s)</span>
+                        </div>
+                        <div className="mobile-card-actions">
+                          <button onClick={() => handleCompanyAction(company.id, "suspend")} className="btn-action" disabled={loading}>⏸ Suspendre</button>
+                          <button onClick={() => handleCompanyAction(company.id, "activate")} className="btn-action" disabled={loading}>▶️ Réactiver</button>
+                          <button onClick={() => handleCompanyAction(company.id, "terminate")} className="btn-action terminate" disabled={loading}>🗑️ Résilier</button>
+                          <button
+                            onClick={() => { setSelectedCompanyId(company.id); setShowCreateAdmin(true); setCurrentTab("admins"); }}
+                            className="btn-add"
+                            style={{ fontSize: 12, padding: "6px 12px" }}
+                          >
+                            ➕ Admin
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Vue DESKTOP : tableau */}
+                <div className="table-container desktop-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Nom</th>
+                        <th>Statut</th>
+                        <th>Admins</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {companies.map((company) => {
+                        const nbAdmins = admins.filter((a) => a.company_id === company.id).length;
+                        return (
+                          <tr key={company.id}>
+                            <td>{company.id}</td>
+                            <td><strong>{company.name}</strong></td>
+                            <td>{statusBadge(company.status)}</td>
+                            <td>{nbAdmins}</td>
+                            <td>
+                              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                                <button onClick={() => handleCompanyAction(company.id, "suspend")} className="btn-action" disabled={loading}>⏸️ Suspendre</button>
+                                <button onClick={() => handleCompanyAction(company.id, "activate")} className="btn-action" disabled={loading}>▶️ Réactiver</button>
+                                <button onClick={() => handleCompanyAction(company.id, "terminate")} className="btn-action terminate" disabled={loading}>🗑️ Résilier</button>
+                                <button
+                                  onClick={() => { setSelectedCompanyId(company.id); setShowCreateAdmin(true); setCurrentTab("admins"); }}
+                                  className="btn-add"
+                                  style={{ fontSize: 12, padding: "6px 12px" }}
+                                >
+                                  ➕ Créer un admin
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}
 
-        {/* ONGLET ADMINS */}
+        {/* ---- ONGLET ADMINS ---- */}
         {currentTab === "admins" && (
           <div className="card">
             <div className="table-header">
-              <h2>👨‍💼 Liste des admins</h2>
-              <button
-                onClick={() => setShowCreateAdmin(!showCreateAdmin)}
-                className="btn-add"
-              >
-                ➕ Créer un admin
+              <h2>👨‍💼 Admins</h2>
+              <button className="btn-add" onClick={() => setShowCreateAdmin(!showCreateAdmin)}>
+                ➕ Nouvel admin
               </button>
             </div>
 
@@ -350,87 +325,113 @@ const SuperAdminDashboard = ({ user }) => {
                 >
                   <option value="">-- Sélectionner une entreprise --</option>
                   {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
+                    <option key={c.id} value={c.id}>{c.name}</option>
                   ))}
                 </select>
                 <button type="submit" className="btn-add" disabled={loading}>
-                  {loading ? "Création..." : "Créer"}
+                  {loading ? "⏳..." : "Créer"}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCreateAdmin(false)}
-                  className="btn-reset"
-                >
+                <button type="button" onClick={() => setShowCreateAdmin(false)} className="btn-reset">
                   Annuler
                 </button>
               </form>
             )}
 
             {admins.length === 0 ? (
-              <p style={{ textAlign: "center", padding: "40px", color: "#666" }}>
-                Aucun admin créé
-              </p>
-            ) : (
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Username</th>
-                      <th>Email</th>
-                      <th>Entreprise</th>
-                      <th>Date création</th>
-                      <th>Première connexion</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {admins.map((admin) => (
-                      <tr key={admin.id}>
-                        <td>{admin.id}</td>
-                        <td><strong>{admin.username}</strong></td>
-                        <td>{admin.email || "-"}</td>
-                        <td>{admin.company_name || <span style={{ color: "red" }}>⚠️ Sans entreprise</span>}</td>
-                        <td>
-                          {admin.created_at
-                            ? new Date(admin.created_at).toLocaleDateString("fr-FR")
-                            : "-"}
-                        </td>
-                        <td>
-                          {admin.first_login ? (
-                            <span style={{ color: "orange" }}>⚠️ Oui</span>
-                          ) : (
-                            <span style={{ color: "green" }}>✅ Non</span>
-                          )}
-                        </td>
-                        {/* ✅ NOUVEAU : Bouton supprimer */}
-                        <td>
-                          <button
-                            onClick={() => handleDeleteAdmin(admin.id, admin.username)}
-                            style={{
-                              padding: "4px 10px",
-                              backgroundColor: "#dc3545",
-                              color: "white",
-                              border: "none",
-                              borderRadius: 4,
-                              cursor: "pointer",
-                              fontSize: "12px"
-                            }}
-                          >
-                            🗑️ Supprimer
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div style={{ textAlign: "center", padding: 40, color: "#666" }}>
+                <p style={{ fontSize: 40, marginBottom: 10 }}>👨‍💼</p>
+                <p>Aucun admin créé</p>
               </div>
+            ) : (
+              <>
+                {/* Vue MOBILE : cartes */}
+                <div className="mobile-cards">
+                  {admins.map((admin) => (
+                    <div key={admin.id} className="mobile-card">
+                      <div className="mobile-card-header">
+                        <strong>{admin.username}</strong>
+                        {admin.first_login
+                          ? <span style={{ color: "orange", fontSize: 12 }}>⚠️ 1ère connexion</span>
+                          : <span style={{ color: "green", fontSize: 12 }}>✅ Actif</span>
+                        }
+                      </div>
+                      <div className="mobile-card-body">
+                        <span>📧 {admin.email || "-"}</span>
+                        <span>🏢 {admin.company_name || <span style={{ color: "red" }}>⚠️ Sans entreprise</span>}</span>
+                        <span>📅 {admin.created_at ? new Date(admin.created_at).toLocaleDateString("fr-FR") : "-"}</span>
+                      </div>
+                      <div className="mobile-card-actions">
+                        <button
+                          onClick={() => handleDeleteAdmin(admin.id, admin.username)}
+                          style={{ padding: "8px 14px", backgroundColor: "#dc3545", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13 }}
+                        >
+                          🗑️ Supprimer
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Vue DESKTOP : tableau */}
+                <div className="table-container desktop-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Entreprise</th>
+                        <th>Créé le</th>
+                        <th>1ère connexion</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {admins.map((admin) => (
+                        <tr key={admin.id}>
+                          <td>{admin.id}</td>
+                          <td><strong>{admin.username}</strong></td>
+                          <td>{admin.email || "-"}</td>
+                          <td>{admin.company_name || <span style={{ color: "red" }}>⚠️ Sans entreprise</span>}</td>
+                          <td>{admin.created_at ? new Date(admin.created_at).toLocaleDateString("fr-FR") : "-"}</td>
+                          <td>
+                            {admin.first_login
+                              ? <span style={{ color: "orange" }}>⚠️ Oui</span>
+                              : <span style={{ color: "green" }}>✅ Non</span>
+                            }
+                          </td>
+                          <td>
+                            <button
+                              onClick={() => handleDeleteAdmin(admin.id, admin.username)}
+                              style={{ padding: "5px 12px", backgroundColor: "#dc3545", color: "white", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 12 }}
+                            >
+                              🗑️ Supprimer
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}
       </main>
+
+      {/* ===== NAV MOBILE FIXE EN BAS ===== */}
+      <nav className="mobile-nav">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            className={currentTab === tab.id ? "mobile-nav-btn active" : "mobile-nav-btn"}
+            onClick={() => setCurrentTab(tab.id)}
+          >
+            <span className="mobile-nav-icon">{tab.icon}</span>
+            <span className="mobile-nav-label">{tab.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 };
