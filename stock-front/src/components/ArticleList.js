@@ -39,7 +39,7 @@ const ArticleList = ({ refresh }) => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [search, setSearch] = useState("");
-  const [showStock, setShowStock] = useState(false);
+  const [showStock, setShowStock] = useState(true); // ✅ Affiché par défaut
   const [echafaudage, setEchafaudage] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [collapsedCats, setCollapsedCats] = useState({});
@@ -47,12 +47,20 @@ const ArticleList = ({ refresh }) => {
   const [niveauxCustom, setNiveauxCustom] = useState("");
   const [metaData, setMetaData] = useState(null);
 
-  const showMessage = (type, text, duration = 3000) => {
+  // Form states
+  const [nomArticle, setNomArticle] = useState("");
+  const [descArticle, setDescArticle] = useState("");
+  const [longArticle, setLongArticle] = useState("");
+  const [largArticle, setLargArticle] = useState("");
+  const [hautArticle, setHautArticle] = useState("");
+  const [qtyArticle, setQtyArticle] = useState("");
+  const [poidsArticle, setPoidsArticle] = useState("");
+
+  const showMessage = (type, text, duration = 4000) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), duration);
   };
 
-  // ✅ CORRIGÉ : poids_total_ligne au lieu de poids_total
   const poidsTotal = echafaudage.reduce(
     (sum, a) => sum + (a.poids_total_ligne || 0),
     0
@@ -61,7 +69,6 @@ const ArticleList = ({ refresh }) => {
   /* ------------------------- CHARGEMENT ARTICLES ------------------------- */
   const loadArticles = useCallback(async () => {
     setLoading(true);
-    setMessage(null);
     try {
       const data = await fetchArticles();
       setArticles(
@@ -84,41 +91,59 @@ const ArticleList = ({ refresh }) => {
 
   /* ------------------------- AJOUT ARTICLE ------------------------- */
   const handleAddArticle = async () => {
-    const nom = document.getElementById("nomArticle").value;
-    const description = document.getElementById("descArticle").value;
-    const longueur = parseFloat(document.getElementById("longArticle").value) || null;
-    const largeur = parseFloat(document.getElementById("largArticle").value) || null;
-    const hauteur = parseFloat(document.getElementById("hautArticle").value) || null;
-    const quantite = parseInt(document.getElementById("qtyArticle").value) || 0;
-    const poids = parseFloat(document.getElementById("poidsArticle").value) || null;
-
-    if (!nom || quantite <= 0) {
-      showMessage("error", "Nom et quantité requis");
+    if (!nomArticle || !qtyArticle || parseInt(qtyArticle) < 0) {
+      showMessage("error", "Nom et quantité requis.");
       return;
     }
 
-    if (!window.confirm(`Confirmer l'ajout de ${nom} (${quantite}) ?`)) return;
+    if (!window.confirm(`Confirmer l'ajout de "${nomArticle}" (${qtyArticle} unités) ?`)) return;
 
+    setLoading(true);
     try {
-      const newArticle = await createArticle({ nom, description, longueur, largeur, hauteur, quantite, poids });
+      const newArticle = await createArticle({
+        nom: nomArticle.trim(),
+        description: descArticle.trim() || null,
+        longueur: longArticle ? parseFloat(longArticle) : null,
+        largeur: largArticle ? parseFloat(largArticle) : null,
+        hauteur: hautArticle ? parseFloat(hautArticle) : null,
+        quantite: parseInt(qtyArticle),
+        poids: poidsArticle ? parseFloat(poidsArticle) : null,
+      });
+
+      // ✅ Mise à jour immédiate de la liste
       setArticles((prev) => [...prev, { ...newArticle, utilise: 0, uuid: uuidv4() }]);
-      showMessage("success", "Article ajouté avec succès.");
-      ["nomArticle", "descArticle", "longArticle", "largArticle", "hautArticle", "qtyArticle", "poidsArticle"]
-        .forEach((id) => (document.getElementById(id).value = ""));
+
+      showMessage("success", `✅ Article "${nomArticle}" ajouté avec succès !`);
+
+      // ✅ Vider le formulaire via state
+      setNomArticle("");
+      setDescArticle("");
+      setLongArticle("");
+      setLargArticle("");
+      setHautArticle("");
+      setQtyArticle("");
+      setPoidsArticle("");
+
+      // ✅ Afficher le stock pour voir l'ajout
+      setShowStock(true);
+
     } catch (err) {
       console.error(err);
-      showMessage("error", "Erreur lors de l'ajout de l'article");
+      showMessage("error", err.response?.data?.detail || "Erreur lors de l'ajout de l'article.");
+    } finally {
+      setLoading(false);
     }
   };
 
   /* ------------------------- SUPPRESSION ARTICLE ------------------------- */
   const removeArticle = async (id) => {
     const article = articles.find((a) => a.id === id);
+    if (!article) return;
+
     if (!window.confirm(`⚠️ Confirmer la suppression DÉFINITIVE de "${article.nom}" ?\n\nCette action est irréversible.`)) return;
 
     setLoading(true);
     try {
-      // ✅ CORRIGÉ : URL dynamique
       const token = JSON.parse(localStorage.getItem("user")).access_token;
       const response = await fetch(`${API_URL}/articles/${id}`, {
         method: "DELETE",
@@ -130,8 +155,10 @@ const ArticleList = ({ refresh }) => {
         throw new Error(error.detail || "Erreur lors de la suppression");
       }
 
+      // ✅ Suppression immédiate de la liste
       setArticles((prev) => prev.filter((a) => a.id !== id));
       showMessage("success", `✅ Article "${article.nom}" supprimé définitivement.`);
+
     } catch (err) {
       console.error("Erreur suppression:", err);
       showMessage("error", `❌ Erreur : ${err.message}`);
@@ -180,7 +207,6 @@ const ArticleList = ({ refresh }) => {
 
     setLoading(true);
     try {
-      // ✅ CORRIGÉ : URL dynamique
       const token = JSON.parse(localStorage.getItem("user")).access_token;
       const response = await fetch(`${API_URL}/calcul/`, {
         method: "POST",
@@ -202,18 +228,16 @@ const ArticleList = ({ refresh }) => {
       if (!response.ok) throw new Error("Erreur lors du calcul");
 
       const data = await response.json();
-      console.log("✅ Réponse backend:", data);
 
-      // ✅ CORRIGÉ : mapping correct des champs de l'API
       const recap = data.pieces.map((p) => ({
         id: p.article_id,
         nom: p.nom,
-        utilise: p.quantite_utilisee,       // ✅ sans accent
+        utilise: p.quantite_utilisee,
         longueur: p.longueur,
         largeur: p.largeur,
         hauteur: p.hauteur,
-        poids_unitaire: p.poids_unitaire,   // ✅ nom correct
-        poids_total_ligne: p.poids_total_ligne, // ✅ nom correct
+        poids_unitaire: p.poids_unitaire,
+        poids_total_ligne: p.poids_total_ligne,
         uuid: uuidv4(),
       }));
 
@@ -221,14 +245,13 @@ const ArticleList = ({ refresh }) => {
       setMetaData(data.meta);
       setModalOpen(true);
 
-      // Vider les champs
       ["echafHauteur", "echafLongueur", "echafLargeur", "nomChantier", "dureeLocation"]
         .forEach((id) => { document.getElementById(id).value = ""; });
 
       if (data.ajustements && data.ajustements.length > 0) {
         showMessage("warning", `Calcul avec ajustements: ${data.ajustements.join(" ; ")}`);
       } else {
-        showMessage("success", `Calcul réussi - ${data.meta.nb_niveaux} niveaux, ${data.meta.nb_travees} travées`);
+        showMessage("success", `✅ Calcul réussi - ${data.meta.nb_niveaux} niveaux, ${data.meta.nb_travees} travées`);
       }
     } catch (err) {
       console.error("❌ Erreur calcul:", err);
@@ -265,13 +288,9 @@ const ArticleList = ({ refresh }) => {
       startY: 25,
       head: [["Nom", "Qté", "Long.", "Larg.", "Haut.", "Poids/u (kg)", "Poids total (kg)"]],
       body: echafaudage.map((a) => [
-        a.nom,
-        a.utilise,
-        a.longueur || "-",
-        a.largeur || "-",
-        a.hauteur || "-",
-        a.poids_unitaire || "-",
-        a.poids_total_ligne || "-",
+        a.nom, a.utilise,
+        a.longueur || "-", a.largeur || "-", a.hauteur || "-",
+        a.poids_unitaire || "-", a.poids_total_ligne || "-",
       ]),
     });
     doc.text(`Poids total : ${poidsTotal.toFixed(2)} kg`, 14, doc.lastAutoTable.finalY + 10);
@@ -279,9 +298,8 @@ const ArticleList = ({ refresh }) => {
   };
 
   const resetUtilise = () => {
-    setArticles((prev) => prev.map((a) => ({ ...a, utilise: 0 })));
     setEchafaudage([]);
-    showMessage("info", 'Champ "utilisé" remis à zéro.');
+    showMessage("info", "Calcul réinitialisé.");
   };
 
   /* ------------------------- RENDER ------------------------- */
@@ -292,17 +310,9 @@ const ArticleList = ({ refresh }) => {
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <button
             onClick={() => window.location.href = "/historique-chantiers"}
-            style={{
-              padding: "8px 16px",
-              backgroundColor: "#007bff",
-              color: "white",
-              border: "none",
-              borderRadius: 4,
-              cursor: "pointer",
-              fontSize: "0.9em",
-            }}
+            style={{ padding: "8px 16px", backgroundColor: "#007bff", color: "white", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 13, minHeight: 44 }}
           >
-            📊 Historique des chantiers
+            📊 Historique
           </button>
           <input
             type="text"
@@ -315,154 +325,205 @@ const ArticleList = ({ refresh }) => {
       </div>
 
       <Message type={message?.type} text={message?.text} />
-      {loading && <p>⏳ Chargement...</p>}
+      {loading && <p style={{ padding: 10, color: "#667eea" }}>⏳ Chargement...</p>}
 
-      {/* Ajout article */}
+      {/* ===== AJOUT ARTICLE ===== */}
       <h3 style={{ marginBottom: 10 }}>➕ Ajouter un article</h3>
-      <div className="ajout-form">
-        {[
-          { id: "nomArticle", placeholder: "Nom *", type: "text" },
-          { id: "descArticle", placeholder: "Description", type: "text" },
-          { id: "longArticle", placeholder: "Longueur (m)", type: "number" },
-          { id: "largArticle", placeholder: "Largeur (m)", type: "number" },
-          { id: "hautArticle", placeholder: "Hauteur (m)", type: "number" },
-          { id: "qtyArticle", placeholder: "Quantité *", type: "number" },
-          { id: "poidsArticle", placeholder: "Poids (kg)", type: "number" },
-        ].map(({ id, placeholder, type }) => (
-          <input key={id} id={id} type={type} step="0.01" placeholder={placeholder} className="input-ajout" />
-        ))}
-        <button className="btn-add" onClick={handleAddArticle}>Ajouter</button>
+      <div className="ajout-form" style={{ flexDirection: "column" }}>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 2, minWidth: 180 }}>
+            <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Nom *</label>
+            <input
+              type="text"
+              value={nomArticle}
+              onChange={(e) => setNomArticle(e.target.value)}
+              placeholder="Ex: Poteau 2m"
+              className="input-ajout"
+              style={{ width: "100%" }}
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 100 }}>
+            <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Quantité *</label>
+            <input
+              type="number"
+              value={qtyArticle}
+              onChange={(e) => setQtyArticle(e.target.value)}
+              placeholder="Ex: 100"
+              className="input-ajout"
+              style={{ width: "100%" }}
+              min="0"
+            />
+          </div>
+          <div style={{ flex: 1, minWidth: 100 }}>
+            <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Poids (kg)</label>
+            <input
+              type="number"
+              value={poidsArticle}
+              onChange={(e) => setPoidsArticle(e.target.value)}
+              placeholder="Ex: 12.5"
+              className="input-ajout"
+              style={{ width: "100%" }}
+              step="0.01"
+              min="0"
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 3, minWidth: 200 }}>
+            <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Description</label>
+            <input
+              type="text"
+              value={descArticle}
+              onChange={(e) => setDescArticle(e.target.value)}
+              placeholder="Ex: Poteau vertical 2m Ringlock - Layher"
+              className="input-ajout"
+              style={{ width: "100%" }}
+            />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 100 }}>
+            <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Longueur (m)</label>
+            <input type="number" value={longArticle} onChange={(e) => setLongArticle(e.target.value)} placeholder="Ex: 3.07" className="input-ajout" style={{ width: "100%" }} step="0.01" min="0" />
+          </div>
+          <div style={{ flex: 1, minWidth: 100 }}>
+            <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Largeur (m)</label>
+            <input type="number" value={largArticle} onChange={(e) => setLargArticle(e.target.value)} placeholder="Ex: 0.61" className="input-ajout" style={{ width: "100%" }} step="0.01" min="0" />
+          </div>
+          <div style={{ flex: 1, minWidth: 100 }}>
+            <label style={{ display: "block", marginBottom: 4, fontWeight: 600, fontSize: 13 }}>Hauteur (m)</label>
+            <input type="number" value={hautArticle} onChange={(e) => setHautArticle(e.target.value)} placeholder="Ex: 2.00" className="input-ajout" style={{ width: "100%" }} step="0.01" min="0" />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="btn-add" onClick={handleAddArticle} disabled={loading} style={{ flex: 2 }}>
+            {loading ? "⏳ Ajout..." : "➕ Ajouter l'article"}
+          </button>
+          <button className="btn-reset" onClick={() => { setNomArticle(""); setDescArticle(""); setLongArticle(""); setLargArticle(""); setHautArticle(""); setQtyArticle(""); setPoidsArticle(""); }} style={{ flex: 1 }}>
+            🔄 Vider
+          </button>
+        </div>
       </div>
 
-      {/* Stock par catégorie */}
+      {/* ===== STOCK PAR CATÉGORIE ===== */}
       <button className="toggle-stock" onClick={() => setShowStock((prev) => !prev)}>
-        {showStock ? "🙈 Masquer le stock" : "👁️ Afficher le stock"}
+        {showStock ? `🙈 Masquer le stock (${articles.length} articles)` : `👁️ Afficher le stock (${articles.length} articles)`}
       </button>
 
-      {showStock && Object.entries(articlesParCategorie).map(([cat, list]) => (
-        <div key={cat} className="categorie-block">
-          <h4
-            onClick={() => setCollapsedCats((prev) => ({ ...prev, [cat]: !prev[cat] }))}
-            style={{ cursor: "pointer" }}
-          >
-            {cat.toUpperCase()} {collapsedCats[cat] ? "▼" : "▲"} ({list.length})
-          </h4>
-          {!collapsedCats[cat] && (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    {["ID", "Nom", "Description", "Quantité", "Long.", "Larg.", "Haut.", "Poids (kg)", "Action"].map((th) => (
-                      <th key={th}>{th}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.map((a) => (
-                    <tr key={a.uuid}>
-                      <td>{a.id || "-"}</td>
-                      <td><strong>{a.nom}</strong></td>
-                      <td style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }}>{a.description || "-"}</td>
-                      <td><strong>{a.quantite}</strong></td>
-                      <td>{a.longueur || "-"}</td>
-                      <td>{a.largeur || "-"}</td>
-                      <td>{a.hauteur || "-"}</td>
-                      <td>{a.poids || "-"}</td>
-                      <td>
-                        <button onClick={() => removeArticle(a.id)} className="btn-remove">❌</button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      {showStock && (
+        <>
+          {articles.length === 0 ? (
+            <div style={{ textAlign: "center", padding: 30, color: "#666" }}>
+              <p style={{ fontSize: 32 }}>📦</p>
+              <p>Aucun article dans le stock</p>
             </div>
+          ) : (
+            Object.entries(articlesParCategorie).map(([cat, list]) => (
+              <div key={cat} className="categorie-block">
+                <h4
+                  onClick={() => setCollapsedCats((prev) => ({ ...prev, [cat]: !prev[cat] }))}
+                  style={{ cursor: "pointer" }}
+                >
+                  {cat.toUpperCase()} {collapsedCats[cat] ? "▼" : "▲"} ({list.length} articles)
+                </h4>
+                {!collapsedCats[cat] && (
+                  <div className="table-container">
+                    <table>
+                      <thead>
+                        <tr>
+                          {["ID", "Nom", "Description", "Quantité", "Long.", "Larg.", "Haut.", "Poids (kg)", "Action"].map((th) => (
+                            <th key={th}>{th}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {list.map((a) => (
+                          <tr key={a.uuid}>
+                            <td>{a.id || "-"}</td>
+                            <td><strong>{a.nom}</strong></td>
+                            <td style={{ maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }}>{a.description || "-"}</td>
+                            <td>
+                              <strong style={{ color: a.quantite <= 10 ? "#dc3545" : a.quantite <= 30 ? "#ffc107" : "#28a745" }}>
+                                {a.quantite}
+                              </strong>
+                            </td>
+                            <td>{a.longueur || "-"}</td>
+                            <td>{a.largeur || "-"}</td>
+                            <td>{a.hauteur || "-"}</td>
+                            <td>{a.poids || "-"}</td>
+                            <td>
+                              <button onClick={() => removeArticle(a.id)} className="btn-remove" title="Supprimer définitivement">❌</button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ))
           )}
-        </div>
-      ))}
+        </>
+      )}
 
-      {/* Calcul échafaudage */}
-      <h3 style={{ marginTop: 20, marginBottom: 10 }}>🧮 Calcul échafaudage</h3>
+      {/* ===== CALCUL ÉCHAFAUDAGE ===== */}
+      <h3 style={{ marginTop: 24, marginBottom: 10 }}>🧮 Calcul échafaudage</h3>
       <div className="calcul-form">
 
-        {/* Informations chantier */}
-        <div style={{ width: "100%", padding: 15, border: "1px solid #ddd", borderRadius: 8, backgroundColor: "#f9f9f9", marginBottom: 10 }}>
+        <div style={{ width: "100%", padding: 14, border: "1px solid #e0e0e0", borderRadius: 8, background: "#f9f9f9" }}>
           <h4 style={{ margin: "0 0 12px 0", color: "#667eea" }}>🏗️ Informations chantier</h4>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ flex: 2, minWidth: 200 }}>
+            <div style={{ flex: 2, minWidth: 180 }}>
               <label style={{ display: "block", marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Nom du chantier</label>
-              <input
-                id="nomChantier"
-                type="text"
-                placeholder="Ex: Rénovation Immeuble A"
-                className="input-ajout"
-                style={{ width: "100%" }}
-              />
+              <input id="nomChantier" type="text" placeholder="Ex: Rénovation Immeuble A" className="input-ajout" style={{ width: "100%" }} />
             </div>
-            <div style={{ flex: 1, minWidth: 120 }}>
+            <div style={{ flex: 1, minWidth: 100 }}>
               <label style={{ display: "block", marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Durée (jours)</label>
-              <input
-                id="dureeLocation"
-                type="number"
-                min="1"
-                placeholder="Ex: 30"
-                className="input-ajout"
-                style={{ width: "100%" }}
-              />
+              <input id="dureeLocation" type="number" min="1" placeholder="Ex: 30" className="input-ajout" style={{ width: "100%" }} />
             </div>
           </div>
         </div>
 
-        {/* Dimensions */}
-        <div style={{ width: "100%", padding: 15, border: "1px solid #ddd", borderRadius: 8, backgroundColor: "#f9f9f9", marginBottom: 10 }}>
+        <div style={{ width: "100%", padding: 14, border: "1px solid #e0e0e0", borderRadius: 8, background: "#f9f9f9" }}>
           <h4 style={{ margin: "0 0 12px 0", color: "#667eea" }}>📐 Dimensions</h4>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            <div style={{ flex: 1, minWidth: 100 }}>
+            <div style={{ flex: 1, minWidth: 90 }}>
               <label style={{ display: "block", marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Hauteur (m) *</label>
               <input id="echafHauteur" type="number" step="0.01" placeholder="Ex: 6" className="input-ajout" style={{ width: "100%" }} />
             </div>
-            <div style={{ flex: 1, minWidth: 100 }}>
+            <div style={{ flex: 1, minWidth: 90 }}>
               <label style={{ display: "block", marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Longueur (m) *</label>
               <input id="echafLongueur" type="number" step="0.01" placeholder="Ex: 12" className="input-ajout" style={{ width: "100%" }} />
             </div>
-            <div style={{ flex: 1, minWidth: 100 }}>
+            <div style={{ flex: 1, minWidth: 90 }}>
               <label style={{ display: "block", marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Largeur (m) *</label>
               <input id="echafLargeur" type="number" step="0.01" placeholder="Ex: 0.73" className="input-ajout" style={{ width: "100%" }} />
             </div>
           </div>
         </div>
 
-        {/* Configuration niveaux */}
-        <div style={{ width: "100%", padding: 15, border: "1px solid #ddd", borderRadius: 8, backgroundColor: "#f9f9f9", marginBottom: 10 }}>
+        <div style={{ width: "100%", padding: 14, border: "1px solid #e0e0e0", borderRadius: 8, background: "#f9f9f9" }}>
           <h4 style={{ margin: "0 0 12px 0", color: "#667eea" }}>📋 Configuration client</h4>
-          <label style={{ display: "block", marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Niveaux de travail (planchers)</label>
-          <select
-            value={niveauxTravail}
-            onChange={(e) => setNiveauxTravail(e.target.value)}
-            className="input-ajout"
-            style={{ width: "100%", marginBottom: 10 }}
-          >
+          <label style={{ display: "block", marginBottom: 5, fontWeight: 600, fontSize: 13 }}>Niveaux de travail</label>
+          <select value={niveauxTravail} onChange={(e) => setNiveauxTravail(e.target.value)} className="input-ajout" style={{ width: "100%", marginBottom: 10 }}>
             <option value="tous">Tous les niveaux (standard)</option>
             <option value="dernier">Dernier niveau uniquement (toiture)</option>
             <option value="custom">Niveaux personnalisés</option>
           </select>
           {niveauxTravail === "custom" && (
             <div>
-              <input
-                type="text"
-                placeholder="Ex: 2,4,5 (numéros de niveaux séparés par virgules)"
-                value={niveauxCustom}
-                onChange={(e) => setNiveauxCustom(e.target.value)}
-                className="input-ajout"
-                style={{ width: "100%" }}
-              />
-              <p style={{ fontSize: 12, color: "#666", marginTop: 5 }}>💡 Saisissez les numéros de niveaux séparés par des virgules</p>
+              <input type="text" placeholder="Ex: 2,4,5" value={niveauxCustom} onChange={(e) => setNiveauxCustom(e.target.value)} className="input-ajout" style={{ width: "100%" }} />
+              <p style={{ fontSize: 12, color: "#666", marginTop: 5 }}>💡 Numéros de niveaux séparés par des virgules</p>
             </div>
           )}
         </div>
 
-        {/* Boutons calcul */}
         <div style={{ width: "100%", display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <button className="btn-calc" onClick={handleCalculEchafaudage} disabled={loading} style={{ flex: 1 }}>
+          <button className="btn-calc" onClick={handleCalculEchafaudage} disabled={loading} style={{ flex: 2 }}>
             {loading ? "⏳ Calcul en cours..." : "🧮 Calculer l'échafaudage"}
           </button>
           <button className="btn-reset" onClick={resetUtilise} style={{ flex: 1 }}>
@@ -471,31 +532,29 @@ const ArticleList = ({ refresh }) => {
         </div>
       </div>
 
-      {/* MODALE RÉCAP */}
+      {/* ===== MODALE RÉCAP ===== */}
       {modalOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 15 }}>
-              <h3 style={{ margin: 0 }}>🏗️ Liste des pièces - Échafaudage</h3>
-              <button onClick={() => setModalOpen(false)} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer" }}>✕</button>
+              <h3 style={{ margin: 0 }}>🏗️ Liste des pièces</h3>
+              <button onClick={() => setModalOpen(false)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", minWidth: 44, minHeight: 44 }}>✕</button>
             </div>
 
-            {/* Meta infos */}
             {metaData && (
               <div style={{ background: "#e8f4f8", padding: 12, borderRadius: 8, marginBottom: 15, fontSize: 13, border: "1px solid #b3d9e6" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 8 }}>
                   <div><strong>🏗️ Travées :</strong> {metaData.nb_travees}</div>
                   <div><strong>📏 Niveaux :</strong> {metaData.nb_niveaux}</div>
                   <div><strong>⚓ Amarrages :</strong> {metaData.amarrages_calcules}</div>
                   <div><strong>🪜 Trappes :</strong> {metaData.trappes_acces}</div>
                   <div><strong>📐 Surface :</strong> {metaData.surface_facade_m2} m²</div>
                   <div><strong>⚖️ Poids :</strong> {metaData.poids_total} kg</div>
-                  <div><strong>🛡️ EN 12810 :</strong> ✅ Conforme</div>
+                  <div><strong>🛡️ EN 12810 :</strong> ✅</div>
                 </div>
               </div>
             )}
 
-            {/* Tableau des pièces */}
             <div className="table-container">
               <table>
                 <thead>
@@ -523,21 +582,17 @@ const ArticleList = ({ refresh }) => {
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr style={{ backgroundColor: "#f8f9ff" }}>
-                    <td colSpan={6} style={{ fontWeight: 700, textAlign: "right", padding: "10px 14px" }}>
-                      POIDS TOTAL :
-                    </td>
-                    <td style={{ fontWeight: 700, fontSize: 16, color: "#667eea" }}>
-                      {poidsTotal.toFixed(2)} kg
-                    </td>
+                  <tr style={{ background: "#f8f9ff" }}>
+                    <td colSpan={6} style={{ fontWeight: 700, textAlign: "right", padding: "10px 14px" }}>POIDS TOTAL :</td>
+                    <td style={{ fontWeight: 700, fontSize: 16, color: "#667eea" }}>{poidsTotal.toFixed(2)} kg</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
 
             <div style={{ marginTop: 15, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <button className="btn-export" onClick={exportExcel}>📊 Exporter Excel</button>
-              <button className="btn-export" onClick={exportPDF}>📄 Exporter PDF</button>
+              <button className="btn-export" onClick={exportExcel}>📊 Excel</button>
+              <button className="btn-export" onClick={exportPDF}>📄 PDF</button>
               <button className="btn-reset" onClick={() => setModalOpen(false)}>✕ Fermer</button>
             </div>
           </div>
