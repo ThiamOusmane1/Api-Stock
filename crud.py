@@ -74,6 +74,9 @@ def update_article_quantite_by_id(db: Session, article_id: int, nouvelle_qte: in
 def delete_article_by_id(db: Session, article_id: int):
     article = db.query(Article).filter(Article.id == article_id).first()
     if article:
+        # ✅ Supprimer d'abord les retraits liés à cet article
+        db.query(Retrait).filter(Retrait.article_id == article_id).delete()
+        # ✅ Ensuite supprimer l'article
         db.delete(article)
         db.commit()
         return {"message": "Article supprimé", "id": article_id}
