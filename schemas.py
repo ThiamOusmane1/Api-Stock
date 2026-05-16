@@ -1,7 +1,7 @@
 # schemas.py
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional, List, Dict
-from models import CompanyStatusEnum
+from models import CompanyStatusEnum, SubRoleEnum
 from datetime import datetime
 
 # -----------------------------
@@ -30,9 +30,10 @@ class UserResponse(BaseModel):
     id: int
     username: str
     role: str
+    sub_role: Optional[str] = "aucun"  # 🆕 Sous-rôle
     company_id: Optional[int] = None
     company_name: Optional[str] = None
-    first_login: bool = False 
+    first_login: bool = False
     email: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -66,7 +67,7 @@ class ArticleBase(BaseModel):
     largeur: Optional[float] = None
     hauteur: Optional[float] = None
     poids: Optional[float] = None
-    
+
     @field_validator("quantite")
     @classmethod
     def quantite_positive(cls, v):
@@ -81,7 +82,7 @@ class ArticleCreate(ArticleBase):
 class ArticleUpdate(BaseModel):
     """Schéma pour mettre à jour la quantité d'un article"""
     quantite: int
-    
+
     @field_validator("quantite")
     @classmethod
     def quantite_positive(cls, v):
@@ -103,9 +104,9 @@ class RetraitRequest(BaseModel):
     """Schéma pour demander un retrait"""
     nom_article: str
     quantite: int
-    nom_chantier: str = ""  # 🆕 Nom du chantier (optionnel)
-    duree_location: Optional[int] = None  # 🆕 Durée de location en jours (optionnel)
-    
+    nom_chantier: str = ""
+    duree_location: Optional[int] = None
+
     @field_validator("quantite")
     @classmethod
     def quantite_positive(cls, v):
@@ -149,8 +150,8 @@ class PieceUsed(BaseModel):
     longueur: Optional[float] = None
     largeur: Optional[float] = None
     hauteur: Optional[float] = None
-    poids_unitaire: float = 0 
-    poids_total_ligne: float = 0 
+    poids_unitaire: float = 0
+    poids_total_ligne: float = 0
     quantite_utilisee: int
     note: Optional[str] = None
 
@@ -161,10 +162,10 @@ class CalculRequest(BaseModel):
     largeur: float
     company_id: Optional[int] = None
     apply_to_stock: bool = False
-    niveaux_travail: str = "tous"  # "tous", "dernier", "liste:1,3,5"
-    nom_chantier: str = ""  # 🆕 Nom du chantier (optionnel)
-    duree_location: Optional[int] = None  # 🆕 Durée de location en jours (optionnel)
-    
+    niveaux_travail: str = "tous"
+    nom_chantier: str = ""
+    duree_location: Optional[int] = None
+
     @field_validator("hauteur", "longueur", "largeur")
     @classmethod
     def dimensions_positives(cls, v):
@@ -180,12 +181,12 @@ class CalculResponse(BaseModel):
     ajustements: List[str]
 
 # -----------------------------
-# 🆕 CHANTIERS
+# CHANTIERS
 # -----------------------------
 class ChantierBase(BaseModel):
     """Schéma de base pour un chantier"""
     nom_chantier: str
-    duree_location: Optional[int] = None  # en jours
+    duree_location: Optional[int] = None
     hauteur: Optional[float] = None
     longueur: Optional[float] = None
     largeur: Optional[float] = None
@@ -201,14 +202,14 @@ class ChantierResponse(ChantierBase):
     id: int
     company_id: int
     date_creation: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 class ChantierUpdate(BaseModel):
     """Schéma pour mettre à jour un chantier"""
     nom_chantier: Optional[str] = None
     duree_location: Optional[int] = None
-    
+
     @field_validator("duree_location")
     @classmethod
     def duree_positive(cls, v):
@@ -224,7 +225,7 @@ class AdminCreate(BaseModel):
     username: str
     email: str
     company_id: int
-    
+
     @field_validator("email")
     @classmethod
     def validate_email(cls, v):
@@ -233,11 +234,12 @@ class AdminCreate(BaseModel):
         return v
 
 class UserCreateByAdmin(BaseModel):
-    """Schéma pour créer un user (par ADMIN)"""
+    """Schéma pour créer un user (par ADMIN) avec sous-rôle"""
     username: str
     email: str
     company_id: int
-    
+    sub_role: Optional[SubRoleEnum] = SubRoleEnum.AUCUN  # 🆕 Sous-rôle choisi par l'admin
+
     @field_validator("email")
     @classmethod
     def validate_email(cls, v):
@@ -249,10 +251,25 @@ class PasswordChange(BaseModel):
     """Schéma pour changer le mot de passe"""
     old_password: str
     new_password: str
-    
+
     @field_validator("new_password")
     @classmethod
     def validate_password_strength(cls, v):
         if len(v) < 8:
             raise ValueError('Le mot de passe doit contenir au moins 8 caractères')
         return v
+
+# -----------------------------
+# 🆕 PERMISSIONS
+# -----------------------------
+class PermissionsResponse(BaseModel):
+    """Schéma pour retourner les permissions d'un utilisateur"""
+    sub_role: str
+    voir_stock: bool
+    faire_retraits: bool
+    calcul_echafaudage: bool
+    historique_chantiers: bool
+    ajouter_articles: bool
+    supprimer_articles: bool
+    export_pdf_excel: bool
+    gerer_utilisateurs: bool

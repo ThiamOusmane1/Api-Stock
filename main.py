@@ -8,8 +8,10 @@ from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime
 from auth import get_password_hash
-from models import User, RoleEnum, Company, CompanyStatusEnum
+from models import User, RoleEnum, Company, CompanyStatusEnum, SubRoleEnum
 from email_service import generate_temp_password, send_welcome_email
+from permissions import get_permissions, has_permission
+from pydantic import BaseModel
 import io
 from database import SessionLocal, engine, Base, get_db
 import models, schemas, crud, auth
@@ -94,6 +96,127 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         "first_login": user.first_login
     }
 
+@app.post("/auth/change-password")
+def change_password(
+    password_data: schemas.PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Changer le mot de passe"""
+    if not auth.verify_password(password_data.old_password, current_user.password_hash):
+        raise HTTPException(status_code=400, detail="Ancien mot de passe incorrect")
+    user = db.query(models.User).filter(models.User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
+    if auth.verify_password(password_data.new_password, user.password_hash):
+        raise HTTPException(status_code=400, detail="Le nouveau mot de passe doit être différent de l'ancien")
+    user.password_hash = auth.get_password_hash(password_data.new_password)
+    user.first_login = False
+    user.password_reset_required = False
+    db.commit()
+    return {"message": "Mot de passe changé avec succès", "first_login": False}
+
+# -----------------------------
+# 👤 UTILISATEUR COURANT + PERMISSIONS
+# -----------------------------
+@app.get("/users/me")
+async def get_current_user_route(
+    token: str = Depends(auth.oauth2_scheme),
+    db: Session = Depends(get_db)
+):
+    """Retourner l'utilisateur actuellement authentifié avec son sous-rôle"""
+    try:
+        from jose import jwt, JWTError
+        payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Token invalide")
+        user = db.query(models.User).filter(models.User.username == username).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
+
+        # ✅ Récupérer le sous-rôle
+        sub_role = user.sub_role.value if hasattr(user.sub_role, 'value') else str(user.sub_role or "aucun")
+
+        return {
+            "id": user.id,
+            "username": user.username,
+            "role": user.role.value if hasattr(user.role, 'value') else str(user.role),
+            "sub_role": sub_role,  # 🆕 NOUVEAU
+            "company_id": user.company_id,
+            "company_name": user.company.name if user.company else None,
+            "first_login": user.first_login
+        }
+    except JWTError:
+        raise HTTPException(
+            status_code=401,
+            detail="Token invalide ou expiré",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=str(e))
+
+# 🆕 NOUVEAU : Récupérer les permissions de l'utilisateur courant
+@app.get("/me/permissions")
+def get_my_permissions(
+    current_user: models.User = Depends(auth.get_current_user)
+):
+    """Retourner les permissions de l'utilisateur connecté selon son sous-rôle"""
+    # Admin et Superadmin ont tous les droits
+    if current_user.role in [models.RoleEnum.ADMIN, models.RoleEnum.SUPERADMIN]:
+        return {
+            "sub_role": current_user.role.value,
+            "voir_stock": True,
+            "faire_retraits": True,
+            "calcul_echafaudage": True,
+            "historique_chantiers": True,
+            "ajouter_articles": True,
+            "supprimer_articles": True,
+            "export_pdf_excel": True,
+            "gerer_utilisateurs": True,
+        }
+    # Utilisateurs : permissions selon sous-rôle
+    sub_role = current_user.sub_role if current_user.sub_role else SubRoleEnum.AUCUN
+    perms = get_permissions(sub_role)
+    return {
+        "sub_role": sub_role.value if hasattr(sub_role, 'value') else str(sub_role),
+        **perms
+    }
+
+@app.get("/users/", response_model=List[schemas.UserResponse])
+def get_users(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_admin_or_super)
+):
+    """Lister les utilisateurs"""
+    if current_user.role == models.RoleEnum.SUPERADMIN:
+        return db.query(models.User).all()
+    else:
+        return db.query(models.User).filter(
+            models.User.company_id == current_user.company_id
+        ).all()
+
+@app.post("/users/", response_model=schemas.UserResponse)
+def create_user(
+    user: schemas.UserCreate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_admin_or_super)
+):
+    """Créer un nouvel utilisateur (Admin/Superadmin)"""
+    existing_user = crud.get_user_by_username(db, user.username)
+    if existing_user:
+        raise HTTPException(status_code=400, detail="Nom d'utilisateur déjà utilisé")
+    hashed_password = auth.get_password_hash(user.password)
+    company_id = user.company_id
+    if current_user.role == models.RoleEnum.ADMIN and not company_id:
+        company_id = current_user.company_id
+    new_user = crud.create_user(
+        db=db, username=user.username,
+        hashed_password=hashed_password,
+        role=user.role, company_id=company_id
+    )
+    return new_user
+
 # -----------------------------
 # 👑 SUPER ADMIN : Gestion entreprises
 # -----------------------------
@@ -119,8 +242,6 @@ def list_entreprises(
     """Lister toutes les entreprises (Superadmin uniquement)"""
     return db.query(models.Company).all()
 
-# ===================== SUPERADMIN - GESTION ENTREPRISES =====================
-
 @app.post("/superadmin/companies/{company_id}/suspend")
 def suspend_company(
     company_id: int,
@@ -137,7 +258,6 @@ def suspend_company(
         user.is_active = False
     db.commit()
     return {"message": "Entreprise suspendue"}
-
 
 @app.post("/superadmin/companies/{company_id}/activate")
 def activate_company(
@@ -157,7 +277,6 @@ def activate_company(
     db.commit()
     return {"message": "Entreprise réactivée"}
 
-
 @app.post("/superadmin/companies/{company_id}/terminate")
 def terminate_company(
     company_id: int,
@@ -172,78 +291,6 @@ def terminate_company(
     db.commit()
     return {"message": "Entreprise résiliée définitivement"}
 
-
-# -----------------------------
-# 👨‍💼 ADMIN ENTREPRISE : Gestion utilisateurs
-# -----------------------------
-@app.post("/users/", response_model=schemas.UserResponse)
-def create_user(
-    user: schemas.UserCreate,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_admin_or_super)
-):
-    """Créer un nouvel utilisateur (Admin/Superadmin)"""
-    existing_user = crud.get_user_by_username(db, user.username)
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Nom d'utilisateur déjà utilisé")
-    hashed_password = auth.get_password_hash(user.password)
-    company_id = user.company_id
-    if current_user.role == models.RoleEnum.ADMIN and not company_id:
-        company_id = current_user.company_id
-    new_user = crud.create_user(
-        db=db,
-        username=user.username,
-        hashed_password=hashed_password,
-        role=user.role,
-        company_id=company_id
-    )
-    return new_user
-
-@app.get("/users/me")
-async def get_current_user_route(
-    token: str = Depends(auth.oauth2_scheme),
-    db: Session = Depends(get_db)
-):
-    """Retourner l'utilisateur actuellement authentifié"""
-    try:
-        from jose import jwt, JWTError
-        payload = jwt.decode(token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="Token invalide")
-        user = db.query(models.User).filter(models.User.username == username).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Utilisateur non trouvé")
-        return {
-            "id": user.id,
-            "username": user.username,
-            "role": user.role.value if hasattr(user.role, 'value') else str(user.role),
-            "company_id": user.company_id,
-            "company_name": user.company.name if user.company else None,
-            "first_login": user.first_login
-        }
-    except JWTError:
-        raise HTTPException(
-            status_code=401,
-            detail="Token invalide ou expiré",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=401, detail=str(e))
-
-@app.get("/users/", response_model=List[schemas.UserResponse])
-def get_users(
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_admin_or_super)
-):
-    """Lister les utilisateurs"""
-    if current_user.role == models.RoleEnum.SUPERADMIN:
-        return db.query(models.User).all()
-    else:
-        return db.query(models.User).filter(
-            models.User.company_id == current_user.company_id
-        ).all()
-
 # -----------------------------
 # 📦 ARTICLES
 # -----------------------------
@@ -254,6 +301,10 @@ def create_article(
     current_user: models.User = Depends(auth.get_current_user)
 ):
     """Créer un nouvel article"""
+    # 🆕 Vérification permission pour les utilisateurs
+    if current_user.role == models.RoleEnum.USER:
+        if not has_permission(current_user.sub_role or SubRoleEnum.AUCUN, "ajouter_articles"):
+            raise HTTPException(status_code=403, detail="Vous n'avez pas la permission d'ajouter des articles")
     if not article.company_id and current_user.company_id:
         article.company_id = current_user.company_id
     return crud.create_article(db, article)
@@ -289,13 +340,17 @@ def update_article(
 def delete_article(
     article_id: int,
     db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.require_admin_or_super)
+    current_user: models.User = Depends(auth.get_current_user)
 ):
     """Supprimer un article"""
+    # 🆕 Vérification permission pour les utilisateurs
+    if current_user.role == models.RoleEnum.USER:
+        if not has_permission(current_user.sub_role or SubRoleEnum.AUCUN, "supprimer_articles"):
+            raise HTTPException(status_code=403, detail="Vous n'avez pas la permission de supprimer des articles")
     article = db.query(models.Article).filter(models.Article.id == article_id).first()
     if not article:
         raise HTTPException(status_code=404, detail="Article non trouvé")
-    if current_user.role != models.RoleEnum.SUPERADMIN:
+    if current_user.role == models.RoleEnum.USER:
         if article.company_id != current_user.company_id:
             raise HTTPException(status_code=403, detail="Accès refusé")
     return crud.delete_article_by_id(db, article_id)
@@ -319,6 +374,10 @@ def retirer_article(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
+    # 🆕 Vérification permission
+    if current_user.role == models.RoleEnum.USER:
+        if not has_permission(current_user.sub_role or SubRoleEnum.AUCUN, "faire_retraits"):
+            raise HTTPException(status_code=403, detail="Vous n'avez pas la permission d'effectuer des retraits")
     article = db.query(models.Article).filter(
         models.Article.nom == retrait.nom_article,
         models.Article.company_id == current_user.company_id
@@ -355,8 +414,12 @@ def calculer_echafaudage(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    company_id = calcul.company_id or current_user.company_id
+    # 🆕 Vérification permission
+    if current_user.role == models.RoleEnum.USER:
+        if not has_permission(current_user.sub_role or SubRoleEnum.AUCUN, "calcul_echafaudage"):
+            raise HTTPException(status_code=403, detail="Vous n'avez pas accès au calcul d'échafaudage")
 
+    company_id = calcul.company_id or current_user.company_id
     pieces_brutes, meta, ajustements = crud.allocate_echafaudage(
         db=db,
         hauteur=calcul.hauteur,
@@ -394,7 +457,6 @@ def calculer_echafaudage(
 
     poids_total = meta.get("poids_total", 0)
 
-    # Enregistrer le chantier
     chantier = models.Chantier(
         company_id=company_id,
         nom_chantier=calcul.nom_chantier,
@@ -422,6 +484,10 @@ def get_chantiers(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
+    # 🆕 Vérification permission
+    if current_user.role == models.RoleEnum.USER:
+        if not has_permission(current_user.sub_role or SubRoleEnum.AUCUN, "historique_chantiers"):
+            raise HTTPException(status_code=403, detail="Vous n'avez pas accès à l'historique des chantiers")
     chantiers = db.query(models.Chantier).filter(
         models.Chantier.company_id == current_user.company_id
     ).order_by(models.Chantier.date_creation.desc()).all()
@@ -456,7 +522,6 @@ def get_stock_stats(db: Session = Depends(get_db)):
         "total_articles": total_articles,
         "stock_total": stock_total,
         "alertes_stock_faible": alertes,
-        # ✅ CORRIGÉ : category (pas categorie)
         "categories": db.query(models.Article.category).distinct().count()
     }
 
@@ -466,7 +531,7 @@ def get_category_stats(db: Session = Depends(get_db)):
     stats = get_stats_by_category(db)
     return [
         {
-            "categorie": stat.categorie,  # alias défini dans crud_filters.py
+            "categorie": stat.categorie,
             "nombre_articles": stat.nombre_articles,
             "stock_total": stat.stock_total
         }
@@ -544,7 +609,6 @@ def export_inventory_pdf(
         "total_articles": len(articles),
         "stock_total": sum(a.quantite for a in articles),
         "alertes_stock_faible": sum(1 for a in articles if a.quantite <= 10),
-        # ✅ CORRIGÉ : a.category (pas a.categorie)
         "categories": len(set(a.category for a in articles))
     }
     pdf_content = create_inventory_pdf(articles, stats)
@@ -604,7 +668,6 @@ def export_custom_pdf(
         "total_articles": len(articles),
         "stock_total": sum(a.quantite for a in articles),
         "alertes_stock_faible": sum(1 for a in articles if a.quantite <= 10),
-        # ✅ CORRIGÉ : a.category (pas a.categorie)
         "categories": len(set(a.category for a in articles))
     }
     pdf_content = create_inventory_pdf(articles, stats)
@@ -670,7 +733,7 @@ async def create_user_for_company(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_admin_or_super)
 ):
-    """Créer un user pour son entreprise (ADMIN uniquement)"""
+    """Créer un user avec sous-rôle pour son entreprise (ADMIN uniquement)"""
     if current_user.role == models.RoleEnum.ADMIN:
         if user_data.company_id != current_user.company_id:
             raise HTTPException(status_code=403, detail="Vous ne pouvez créer des utilisateurs que pour votre entreprise")
@@ -689,7 +752,8 @@ async def create_user_for_company(
         company_id=user_data.company_id,
         email=user_data.email,
         first_login=True,
-        password_reset_required=False
+        password_reset_required=False,
+        sub_role=user_data.sub_role or SubRoleEnum.AUCUN  # 🆕 NOUVEAU
     )
     db.add(new_user)
     db.commit()
@@ -706,35 +770,15 @@ async def create_user_for_company(
     except Exception as e:
         print(f"⚠️ Erreur envoi email : {e}")
         email_sent = False
-    # ✅ CORRIGÉ : temp_password retiré de la réponse (sécurité)
     return {
         "message": "Utilisateur créé avec succès",
         "username": new_user.username,
         "email": user_data.email,
+        "sub_role": new_user.sub_role.value,  # 🆕 NOUVEAU
         "company": company.name,
         "email_sent": email_sent,
         "first_login_required": True
     }
-
-@app.post("/auth/change-password")
-def change_password(
-    password_data: schemas.PasswordChange,
-    db: Session = Depends(get_db),
-    current_user: models.User = Depends(auth.get_current_user)
-):
-    """Changer le mot de passe"""
-    if not auth.verify_password(password_data.old_password, current_user.password_hash):
-        raise HTTPException(status_code=400, detail="Ancien mot de passe incorrect")
-    user = db.query(models.User).filter(models.User.id == current_user.id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Utilisateur introuvable")
-    if auth.verify_password(password_data.new_password, user.password_hash):
-        raise HTTPException(status_code=400, detail="Le nouveau mot de passe doit être différent de l'ancien")
-    user.password_hash = auth.get_password_hash(password_data.new_password)
-    user.first_login = False
-    user.password_reset_required = False
-    db.commit()
-    return {"message": "Mot de passe changé avec succès", "first_login": False}
 
 @app.get("/admin/list-admins")
 async def list_admins(
@@ -761,7 +805,7 @@ async def list_users_of_company(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_admin_or_super)
 ):
-    """Lister les users de son entreprise (ADMIN) ou tous (SUPERADMIN)"""
+    """Lister les users de son entreprise avec leur sous-rôle"""
     if current_user.role == models.RoleEnum.SUPERADMIN:
         users = db.query(models.User).filter(models.User.role == models.RoleEnum.USER).all()
     else:
@@ -774,6 +818,7 @@ async def list_users_of_company(
             "id": user.id,
             "username": user.username,
             "email": user.email if hasattr(user, 'email') else None,
+            "sub_role": user.sub_role.value if user.sub_role and hasattr(user.sub_role, 'value') else "aucun",  # 🆕 NOUVEAU
             "company_id": user.company_id,
             "company_name": user.company.name if user.company else None,
             "created_at": user.created_at.isoformat() if hasattr(user, 'created_at') and user.created_at else None,
@@ -796,6 +841,34 @@ def delete_user_by_admin(
     db.delete(user)
     db.commit()
     return {"message": "Utilisateur supprimé avec succès"}
+
+# 🆕 NOUVEAU : Modifier le sous-rôle d'un utilisateur
+class SubRoleUpdate(BaseModel):
+    sub_role: str
+
+@app.put("/admin/users/{user_id}/sub-role")
+def update_user_sub_role(
+    user_id: int,
+    data: SubRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_admin_or_super)
+):
+    """Modifier le sous-rôle d'un utilisateur (ADMIN uniquement)"""
+    user = db.query(models.User).get(user_id)
+    if not user:
+        raise HTTPException(404, "Utilisateur introuvable")
+    if current_user.role == RoleEnum.ADMIN and user.company_id != current_user.company_id:
+        raise HTTPException(403, "Action interdite")
+    try:
+        user.sub_role = SubRoleEnum(data.sub_role)
+    except ValueError:
+        raise HTTPException(400, f"Sous-rôle invalide : {data.sub_role}")
+    db.commit()
+    return {
+        "message": f"Sous-rôle mis à jour : {user.sub_role.value}",
+        "user_id": user_id,
+        "sub_role": user.sub_role.value
+    }
 
 # -----------------------------
 # 🏥 HEALTHCHECK

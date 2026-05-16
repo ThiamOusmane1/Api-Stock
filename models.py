@@ -9,6 +9,14 @@ class RoleEnum(str, enum.Enum):
     ADMIN = "admin"
     USER = "user"
 
+# 🆕 NOUVEAU : Sous-rôles pour les utilisateurs d'une entreprise
+class SubRoleEnum(str, enum.Enum):
+    COMMERCIAL = "commercial"
+    MAGASINIER = "magasinier"
+    CHEF_CHANTIER = "chef_chantier"
+    GESTIONNAIRE_STOCK = "gestionnaire_stock"
+    AUCUN = "aucun"  # Rôle par défaut (accès standard)
+
 class CompanyStatusEnum(str, enum.Enum):
     ACTIVE = "active"
     SUSPENDED = "suspended"
@@ -24,7 +32,6 @@ class Company(Base):
         default=CompanyStatusEnum.ACTIVE,
         nullable=False
     )
-    
     suspended_at = Column(DateTime, nullable=True)
     terminated_at = Column(DateTime, nullable=True)
 
@@ -39,15 +46,22 @@ class User(Base):
     username = Column(String, unique=True, nullable=False, index=True)
     password_hash = Column(String, nullable=False)
     role = Column(Enum(RoleEnum), default=RoleEnum.USER)
+
+    # 🆕 Sous-rôle pour les utilisateurs d'une entreprise
+    sub_role = Column(
+        Enum(SubRoleEnum),
+        default=SubRoleEnum.AUCUN,
+        nullable=False,
+        server_default="aucun"
+    )
+
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=True)
-    
-    # 🆕 NOUVEAUX CHAMPS pour gestion première connexion
-    first_login = Column(Boolean, default=True)  # True = doit changer son mot de passe
-    password_reset_required = Column(Boolean, default=False)  # Pour reset forcé
-    is_active = Column(Boolean, default=True)  # True = actif, False = suspendu
-    email = Column(String, nullable=True)  # Pour envoi mot de passe
+    first_login = Column(Boolean, default=True)
+    password_reset_required = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    email = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     company = relationship("Company", back_populates="users")
     retraits = relationship("Retrait", back_populates="user")
 
@@ -78,25 +92,22 @@ class Retrait(Base):
     quantite = Column(Integer, nullable=False)
     poids_total = Column(Float, default=0.0)
     date_retrait = Column(DateTime, default=datetime.utcnow)
-    
+
     article = relationship("Article", back_populates="retraits")
     company = relationship("Company", back_populates="retraits")
     user = relationship("User", back_populates="retraits")
 
-    # 🆕 NOUVEAU MODÈLE
 class Chantier(Base):
     __tablename__ = "chantiers"
-    
     id = Column(Integer, primary_key=True, index=True)
     company_id = Column(Integer, ForeignKey("companies.id"))
     nom_chantier = Column(String, nullable=False)
-    duree_location = Column(Integer)  # en jours
+    duree_location = Column(Integer)
     hauteur = Column(Float)
     longueur = Column(Float)
     largeur = Column(Float)
     niveaux_travail = Column(String)
     date_creation = Column(DateTime, default=datetime.utcnow)
     poids_total = Column(Float)
-    
-    company = relationship("Company", back_populates="chantiers")
 
+    company = relationship("Company", back_populates="chantiers")
