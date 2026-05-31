@@ -12,6 +12,10 @@ load_dotenv()
 # (Sinon, SQLite sera utilisé par défaut)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
 
+print("================================")
+print("DATABASE_URL =", DATABASE_URL)
+print("================================")
+
 # Création du moteur SQLAlchemy
 connect_args = {}
 if DATABASE_URL.startswith("sqlite"):

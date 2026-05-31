@@ -892,3 +892,42 @@ tbody tr:hover {
     max-height: 85vh;
   }
 }
+
+.password-input-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.password-input-container input {
+  width: 100%;
+  padding-right: 45px;
+}
+
+.toggle-password-btn {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.toggle-password-btn:hover {
+  transform: scale(1.1);
+}
+
+.forgot-password {
+  margin-top: 8px;
+  text-align: right;
+}
+
+.forgot-password a {
+  color: #007bff;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.forgot-password a:hover {
+  text-decoration: underline;
+}
