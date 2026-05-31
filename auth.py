@@ -91,6 +91,13 @@ def require_admin_or_super(user: User = Depends(get_current_user)):
 # Fonction utilitaire pour authentifier un utilisateur
 def authenticate_user(db: Session, username: str, password: str):
     print(f"🔐 Authentification de l'utilisateur: {username}")  # ✅ DEBUG
+
+    users = db.query(User).all()
+    print("📋 Utilisateurs présents :")
+    for u in users:
+        print(f" - {u.username}")
+
+        
     user = db.query(User).filter(User.username == username).first()
 
 
